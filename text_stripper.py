@@ -154,7 +154,6 @@ Key Function Details:
 """
 
 
-
 import tkinter as tk
 from tkinter import ttk 
 from tkinter import (Label, Frame, IntVar, BooleanVar, DoubleVar, Scale, Entry, Checkbutton, Spinbox, Button, Text, Scrollbar, PanedWindow, Radiobutton,
@@ -178,7 +177,7 @@ except ImportError:
         def Tk(): return tk.Tk()
     DND_FILES = None
 
-APP_VERSION = "1.6.4" # Restored 3-column settings layout, includes all features
+APP_VERSION = "1.6.4" # Refined toggle_controls_state for TclError on Frames
 
 # --- Default values ---
 DEFAULT_MIN_WORDS_GENERAL = 11; DEFAULT_MIN_WORDS_SENTENCE = 5
@@ -299,7 +298,7 @@ def create_synchronized_setting(parent, label_text, var, from_, to, resolution=N
         except tk.TclError: pass
     var.trace_add("write", _update_entry_from_scale); entry_var.trace_add("write", _update_scale_from_entry)
     _update_entry_from_scale()
-    return [entry, scale] # Return stateful widgets: Entry, Scale
+    return [entry, scale] # Return ONLY stateful widgets
 def create_spinbox_setting(parent, label_text, var, from_, to, label_width=26, spinbox_width=5, indent=15, increment=1):
     frame = Frame(parent); frame.pack(side=TOP, fill=X, padx=5, pady=1)
     Label(frame, text=label_text, width=label_width, anchor=W).pack(side=LEFT, padx=(indent, 5))
@@ -312,29 +311,47 @@ def create_scale_setting(parent, label_text, var, from_, to, resolution, label_w
     scale = Scale(frame, variable=var, from_=from_, to=to, resolution=resolution, orient=HORIZONTAL, length=scale_length)
     scale.pack(side=LEFT, fill=X, expand=True, padx=5)
     return scale
-def toggle_controls_state(toggle_var, controls_list_of_widgets): 
+
+# --- MODIFIED toggle_controls_state ---
+def toggle_controls_state(toggle_var, controls_list_of_widgets):
     new_state = NORMAL if toggle_var.get() == 1 else DISABLED
     for control_widget in controls_list_of_widgets:
-        if control_widget and hasattr(control_widget, 'configure') and not isinstance(control_widget, tk.Label):
-            try: control_widget.configure(state=new_state)
-            except tk.TclError as e: 
-                if "unknown option \"-state\"" in str(e).lower() and isinstance(control_widget, (tk.Frame, ttk.Frame)):
-                    print(f"INFO: Cannot set -state for Frame widget {control_widget}. Iterating children.")
-                    for child in control_widget.winfo_children(): # Try to disable children of a frame
-                         if hasattr(child, 'configure') and not isinstance(child, tk.Label):
-                            try: child.configure(state=new_state)
-                            except tk.TclError: pass # Ignore if child also can't be stated
-                else:
-                    print(f"ERROR: TclError configuring widget {control_widget}: {e}")
+        if not (control_widget and hasattr(control_widget, 'configure')):
+            # print(f"DEBUG: Skipping control {control_widget}, None or no configure method.")
+            continue
+        if isinstance(control_widget, tk.Label): # Labels don't have a state to toggle
+            # print(f"DEBUG: Skipping Label {control_widget}.")
+            continue
 
-# --- MODIFIED: populate_settings_content for THREE columns ---
+        try:
+            # print(f"DEBUG: Attempting to configure {control_widget} to {new_state}")
+            control_widget.configure(state=new_state)
+        except tk.TclError as e:
+            # If it's a Frame and the error is about '-state', try its children
+            if isinstance(control_widget, (tk.Frame, ttk.Frame)) and \
+               ("unknown option \"-state\"" in str(e).lower() or "invalid command name" in str(e).lower()): # Broader check for error message
+                print(f"INFO: Cannot set -state for Frame widget {control_widget}. Iterating children.")
+                for child in control_widget.winfo_children():
+                    # Apply to child only if it's not a Label and has 'configure'
+                    if hasattr(child, 'configure') and not isinstance(child, tk.Label):
+                        try:
+                            child.configure(state=new_state)
+                        except tk.TclError: 
+                            # If child of frame also can't be stated (e.g. another nested frame without state), pass
+                            # print(f"DEBUG: Child {child} of Frame could not be configured.")
+                            pass 
+            else: # Different TclError, or not a Frame that failed due to -state
+                print(f"ERROR: TclError configuring widget {control_widget} (not a Frame state issue, or unhandled): {e}")
+        # except Exception as e_gen: # Catch any other unexpected errors
+            # print(f"ERROR: Unexpected error configuring widget {control_widget}: {e_gen}")
+
+
 def populate_settings_content(parent_scrollable_frame):
     column_container = ttk.Frame(parent_scrollable_frame); column_container.pack(fill=BOTH, expand=True)
     col1_frame = ttk.Frame(column_container, padding=(0,0,10,0)); col1_frame.pack(side=LEFT, fill=Y, expand=False, anchor=NW, padx=(0,5))
     col2_frame = ttk.Frame(column_container, padding=(0,0,10,0)); col2_frame.pack(side=LEFT, fill=Y, expand=False, anchor=NW, padx=(0,5))
-    col3_frame = ttk.Frame(column_container); col3_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW) # Last column expands more
+    col3_frame = ttk.Frame(column_container); col3_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW) 
 
-    # --- Column 1: Basic Text Filters & Segmentation ---
     Label(col1_frame, text="Basic, Segmentation & Alphanum:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
     create_synchronized_setting(col1_frame, "Min Words (General Seq):", min_words_general_var, 1, 100, is_int=True, label_width=26)
     create_synchronized_setting(col1_frame, "Min Words (Punctuated Sent.):", min_words_sentence_var, 1, 50, is_int=True, label_width=26)
@@ -351,23 +368,20 @@ def populate_settings_content(parent_scrollable_frame):
     Scale(alphanum_main_frame, variable=alphanum_filter_enabled_var, from_=0, to=1, resolution=1, orient=HORIZONTAL, length=60, showvalue=0).pack(side=LEFT, padx=2)
     Label(alphanum_main_frame, textvariable=filter_status_label_var, width=4).pack(side=LEFT)
     
-    ratio_frame_parent = Frame(col1_frame); ratio_frame_parent.pack(fill=X, padx=(20,0), pady=0) 
-    # create_synchronized_setting returns [Entry, Scale] which are stateful
-    ratio_widgets = create_synchronized_setting(ratio_frame_parent, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, resolution=0.01, is_int=False, label_width=24, control_length=120)
-    alnum_sensitivity_controls.extend(ratio_widgets)
+    # create_synchronized_setting returns [Entry, Scale]
+    ratio_widgets = create_synchronized_setting(col1_frame, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, resolution=0.01, is_int=False, label_width=24, control_length=120)
+    alnum_sensitivity_controls.extend(ratio_widgets) # Correctly extends with [Entry, Scale]
+
     alnum_sensitivity_controls.append(create_spinbox_setting(col1_frame, "Min Seg Len for Ratio Test:", alnum_min_len_for_ratio_var, 1, 50, label_width=24, indent=20))
     alnum_sensitivity_controls.append(create_spinbox_setting(col1_frame, "Abs Alnum Fallback Count:", alnum_abs_count_fallback_var, 0, 100, label_width=24, indent=20))
-    update_alphanum_status_and_toggle() # Initial state for sensitivity controls
+    update_alphanum_status_and_toggle() 
 
-    # --- Column 2: File Handling & Output Options, Main Advanced Toggles ---
     Label(col2_frame, text="File & Output / Adv. Toggles:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
     create_entry_setting(col2_frame, "Custom Input Exts (,.ext):", custom_file_extensions_var, entry_width=25, label_width=22)
     create_entry_setting(col2_frame, "Output File Suffix:", custom_output_suffix_var, entry_width=25, label_width=22)
     Label(col2_frame, text="(e.g., _cleaned -> name_cleaned.txt)", font=('Helvetica', 8, 'italic')).pack(side=TOP, anchor=W, padx=10, pady=(0,5))
-    
     url_extract_frame = Frame(col2_frame); url_extract_frame.pack(side=TOP, fill=X, padx=5, pady=(5,2))
     Checkbutton(url_extract_frame, text="Extract and list URLs from text", variable=extract_urls_enabled_var).pack(side=LEFT, anchor=W)
-
     Label(col2_frame, text="--- Advanced Filter Toggles ---", font=('Helvetica', 9, 'italic')).pack(side=TOP, pady=(10,2), anchor=NW, padx=5)
     cb_remove_code = Checkbutton(col2_frame, text="Enable Code Block Filter", variable=remove_code_blocks_var)
     cb_remove_code.pack(side=TOP, anchor=W, padx=15)
@@ -378,62 +392,55 @@ def populate_settings_content(parent_scrollable_frame):
     cb_custom_regex = Checkbutton(col2_frame, text="Enable Custom Regex Filter", variable=custom_regex_enabled_var)
     cb_custom_regex.pack(side=TOP, anchor=W, padx=15)
 
-    # --- Column 3: Advanced Filter Sensitivity Details ---
     Label(col3_frame, text="Advanced Sensitivity Details:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-    
-    # Sensitivity for Code Block Filter
     code_sensitivity_label = Label(col3_frame, text="Code Filter Sensitivity:", font=('Helvetica', 9, 'italic'))
-    code_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
-    temp_code_controls = []
+    code_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5); temp_code_controls = []
     temp_code_controls.append(create_spinbox_setting(col3_frame, "Min Keywords:", min_code_keywords_var, 0, 20, label_width=20))
     temp_code_controls.append(create_spinbox_setting(col3_frame, "Min Code Symbols:", min_code_symbols_var, 0, 30, label_width=20))
     temp_code_controls.append(create_spinbox_setting(col3_frame, "Min Words in Segment:", min_words_code_check_var, 1, 20, label_width=20))
     temp_code_controls.append(create_scale_setting(col3_frame, "Symbol Density >", code_symbol_density_var, 0.01, 0.5, 0.01, scale_length=100, label_width=20))
-    remove_code_blocks_var.trace_add("write", lambda *args: toggle_controls_state(remove_code_blocks_var, temp_code_controls + [code_sensitivity_label]))
-    toggle_controls_state(remove_code_blocks_var, temp_code_controls + [code_sensitivity_label])
+    remove_code_blocks_var.trace_add("write", lambda *args: toggle_controls_state(remove_code_blocks_var, temp_code_controls + [code_sensitivity_label])) # Add label to list
+    toggle_controls_state(remove_code_blocks_var, temp_code_controls + [code_sensitivity_label]) # Initial state
 
-    # Sensitivity for Concatenated Word Filter (main toggle is for behavior, these define what is "concatenated")
-    concat_sensitivity_label = Label(col3_frame, text="Concatenated Word Def.:", font=('Helvetica', 9, 'italic'))
-    concat_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
-    create_spinbox_setting(col3_frame, "Min Length to Check:", min_len_concat_check_var, 10, 50, label_width=20)
-    create_spinbox_setting(col3_frame, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10, label_width=20)
+    concat_sensitivity_label = Label(col3_frame, text="Concatenated Word Def.:", font=('Helvetica', 9, 'italic')) # Concatenated word filter behavior toggle is cb_remove_concat
+    concat_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5) # This label doesn't need to be toggled by cb_remove_concat
+    temp_concat_controls_sensitivity = [] # These are always active, define "what is a concat word"
+    temp_concat_controls_sensitivity.append(create_spinbox_setting(col3_frame, "Min Length to Check:", min_len_concat_check_var, 10, 50, label_width=20))
+    temp_concat_controls_sensitivity.append(create_spinbox_setting(col3_frame, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10, label_width=20))
+    # No toggle_controls_state needed for these two as they are always relevant to how the concat filter (which is always "on" in terms of logic) identifies words
 
-    # Sensitivity for Symbol-Enclosed Word Filter
     symbol_sensitivity_label = Label(col3_frame, text="Symbol-Enclosed Sensitivity:", font=('Helvetica', 9, 'italic'))
-    symbol_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
-    temp_symbol_controls = []
+    symbol_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5); temp_symbol_controls = []
     temp_symbol_controls.append(create_spinbox_setting(col3_frame, "Max Symbols Around:", max_symbols_around_var, 1, 5, label_width=20))
     remove_symbol_enclosed_var.trace_add("write", lambda *args: toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label]))
     toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label])
 
-    # Sensitivity for Custom Regex Filter
     regex_sensitivity_label = Label(col3_frame, text="Custom Regex Details:", font=('Helvetica', 9, 'italic'))
-    regex_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
-    temp_regex_controls = []
+    regex_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5); temp_regex_controls = []
     regex_entry_widget = create_entry_setting(col3_frame, "Regex Pattern:", custom_regex_pattern_var, entry_width=25, indent=15, label_width=20)
     temp_regex_controls.append(regex_entry_widget)
-    regex_mode_frame_col3 = Frame(col3_frame); regex_mode_frame_col3.pack(side=TOP, fill=X, padx=(20,5))
-    Label(regex_mode_frame_col3, text="Mode:").pack(side=LEFT)
+    regex_mode_frame_col3 = Frame(col3_frame); regex_mode_frame_col3.pack(side=TOP, fill=X, padx=(20,5)) # Frame itself doesn't need state
+    Label(regex_mode_frame_col3, text="Mode:").pack(side=LEFT) 
     rb_remove = Radiobutton(regex_mode_frame_col3, text="Remove", variable=custom_regex_mode_var, value="remove_matches")
     rb_remove.pack(side=LEFT, padx=1); temp_regex_controls.append(rb_remove)
     rb_keep = Radiobutton(regex_mode_frame_col3, text="Keep Only", variable=custom_regex_mode_var, value="keep_matches")
     rb_keep.pack(side=LEFT, padx=1); temp_regex_controls.append(rb_keep)
-    cb_case_sensitive = Checkbutton(regex_mode_frame_col3, text="Case Sens.", variable=custom_regex_case_sensitive_var)
-    cb_case_sensitive.pack(side=LEFT, padx=2); temp_regex_controls.append(cb_case_sensitive)
-    custom_regex_enabled_var.trace_add("write", lambda *args: toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label, regex_mode_frame_col3]))
-    toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label, regex_mode_frame_col3])
+    cb_case_sensitive = Checkbutton(col3_frame, text="Case Sensitive", variable=custom_regex_case_sensitive_var) # Parent to col3_frame for alignment
+    cb_case_sensitive.pack(side=TOP, anchor=W, padx=35); temp_regex_controls.append(cb_case_sensitive) # Indent
+    custom_regex_enabled_var.trace_add("write", lambda *args: toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label, regex_mode_frame_col3.winfo_children()[0] ] )) # Add Label from mode frame
+    toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label, regex_mode_frame_col3.winfo_children()[0] ])
 
 
 # --- Text Extraction and Processing Logic (as in v1.5.9) ---
-def extract_text_from_txt(filepath): # ... (as in v1.5.9)
+def extract_text_from_txt(filepath): # Unchanged
     try:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f: return f.read()
     except Exception as e: print(f"Error reading .txt {filepath}: {e}"); status_label.config(text=f"Error reading .txt: {os.path.basename(filepath)}"); return ""
-def extract_text_from_docx(filepath): # ... (as in v1.5.9)
+def extract_text_from_docx(filepath): # Unchanged
     try:
         doc = Document(filepath); return '\n'.join([para.text for para in doc.paragraphs])
     except Exception as e: print(f"Error reading .docx {filepath}: {e}"); status_label.config(text=f"Error reading .docx: {os.path.basename(filepath)}"); return ""
-def extract_text_from_pdf(filepath): # ... (as in v1.5.9)
+def extract_text_from_pdf(filepath): # Unchanged
     text = "";
     try:
         with open(filepath, 'rb') as f:
@@ -444,18 +451,18 @@ def extract_text_from_pdf(filepath): # ... (as in v1.5.9)
             for page in reader.pages: page_text = page.extract_text(); text += (page_text + "\n") if page_text else ""
     except Exception as e: print(f"Error reading .pdf {filepath}: {e}"); status_label.config(text=f"Error reading .pdf: {os.path.basename(filepath)}"); return ""
     return text
-def get_alphanumeric_ratio(text_segment): # ... (as in v1.5.9)
+def get_alphanumeric_ratio(text_segment): # Unchanged
     if not text_segment: return 0.0
     alphanumeric_chars = sum(1 for char in text_segment if char.isalnum())
     return alphanumeric_chars / len(text_segment) if len(text_segment) > 0 else 0.0
-def is_sentence_or_long_sequence(text_segment, min_words_general_sequence=6, min_words_punctuated_sentence=2): # ... (as in v1.5.9)
+def is_sentence_or_long_sequence(text_segment, min_words_general_sequence=6, min_words_punctuated_sentence=2): # Unchanged
     stripped_segment = text_segment.strip();
     if not stripped_segment: return False
     words = stripped_segment.split(); word_count = len(words)
     if stripped_segment.endswith(('.', '!', '?')) and word_count >= min_words_punctuated_sentence: return True
     if word_count >= min_words_general_sequence: return True
     return False
-def split_concatenated_token(token): # ... (as in v1.5.9)
+def split_concatenated_token(token): # Unchanged
     if not token: return []
     s1 = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", token)
     s2 = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s1)
@@ -463,7 +470,7 @@ def split_concatenated_token(token): # ... (as in v1.5.9)
     s4 = re.sub(r"(\d)([a-zA-Z])", r"\1 \2", s3)
     return [word for word in s4.split(' ') if word]
 def is_code_like_segment(segment_text, words_in_segment, 
-                         min_keywords, min_symbols, min_words_check, symbol_density_thresh): # ... (as in v1.5.9)
+                         min_keywords, min_symbols, min_words_check, symbol_density_thresh): # Unchanged
     if len(words_in_segment) < min_words_check: return False 
     keyword_hits = sum(1 for word in words_in_segment if word in CODE_KEYWORDS_LIST or word.lower() in CODE_KEYWORDS_LIST)
     segment_len = len(segment_text)
@@ -482,7 +489,7 @@ def process_text(full_text, min_words_general, min_words_sentence,
                  do_remove_symbol_enclosed, symbol_max_around,
                  do_remove_code_blocks, code_min_kw, code_min_sym, code_min_words_seg, code_sym_dens,
                  custom_regex_on, custom_regex_pat, custom_regex_mode_val, custom_regex_cs,
-                 max_segment_len_for_nl_split): # ... (as in v1.5.9)
+                 max_segment_len_for_nl_split): # Unchanged
     extracted_content = []
     if not full_text or not full_text.strip(): return ""
     processed_full_text = re.sub(r'(<[^>]+>)', r'\n\1\n', full_text) 
@@ -723,7 +730,7 @@ root.protocol("WM_DELETE_WINDOW", on_main_window_close)
 settings_container_frame = Frame(root, relief=SUNKEN, borderwidth=1); settings_container_frame.pack(side=TOP, fill=X, padx=7, pady=(7,0))
 Label(settings_container_frame, text="Filter Settings", font=('Helvetica', 12, 'bold')).pack(anchor=W, padx=5, pady=(5,2))
 settings_scroll_canvas_frame = Frame(settings_container_frame); settings_scroll_canvas_frame.pack(fill=X, expand=False) 
-settings_canvas = tk.Canvas(settings_scroll_canvas_frame, borderwidth=0, height=320) # Adjusted height slightly
+settings_canvas = tk.Canvas(settings_scroll_canvas_frame, borderwidth=0, height=320) 
 settings_scrollbar = ttk.Scrollbar(settings_scroll_canvas_frame, orient="vertical", command=settings_canvas.yview)
 scrollable_settings_content_frame = ttk.Frame(settings_canvas) 
 scrollable_settings_content_frame.bind("<Configure>", lambda e: settings_canvas.configure(scrollregion=settings_canvas.bbox("all")))
