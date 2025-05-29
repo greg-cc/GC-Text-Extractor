@@ -16,7 +16,7 @@ Instantly see affect on your sample text.
 **3. Process Files (Bottom Section):**
 Simply drag and drop. Saves the cleaned text to a new file in the same directory as the original + 'txtextract123.txt`.
 
-
+#   - Enabled filters are applied sequentially
 ## Basic Filters
 
 * **Min Words (General Seq):** Define the minimum number of words a general, non-punctuated sequence of text must have to be kept.
