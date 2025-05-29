@@ -44,6 +44,12 @@ This removes words surrounded by symbols (e.g., `*important*`, `_variable_`).
 * **Main Toggle:** `[ ] Remove words enclosed by symbols`
 * **Sensitivity:** The "Max Symbols Around" setting defines how many symbols on each side of a word the filter will consider for removal along with the word.
 
+###    - Custom Regex Filter:
+            - Allows users to input a custom regular expression.
+            - Modes: "Remove segments matching regex" or "Keep only segments matching regex".
+            - Toggle for case-sensitive matching.
+            - Invalid regex patterns are flagged in the status bar.
+
 ## Installation
 
 1.  **Prerequisites:**
