@@ -1,0 +1,16 @@
+{
+    "min_words_general_var": 11,
+    "min_words_sentence_var": 3,
+    "alphanum_filter_enabled_var": 1,
+    "alphanum_threshold_var": 0.41,
+    "remove_code_blocks_var": 1,
+    "min_code_keywords_var": 1,
+    "min_code_symbols_var": 2,
+    "min_words_code_check_var": 2,
+    "code_symbol_density_var": 0.26,
+    "remove_concat_entirely_var": 1,
+    "min_len_concat_check_var": 13,
+    "min_sub_words_replace_var": 3,
+    "remove_symbol_enclosed_var": 1,
+    "max_symbols_around_var": 3
+}
