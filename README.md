@@ -1,4 +1,4 @@
-# GC-Text-Extractor
+# GC-Text-Extractor (work in progress)
 Extract text from non binary files with sliders and preview. Drag and drop.
 
 ![GC Text Extractor Interface](https://raw.githubusercontent.com/greg-cc/GC-Text-Extractor/refs/heads/main/GC%20text%20extractor.png)
