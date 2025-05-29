@@ -8,13 +8,41 @@ The **GC Text Extractor** efficiently extracts meaningful text from your documen
 ## Key Areas & Usage
 
 **1. Filter Settings (Scrollable Top Section):**
-Fine-tune your extraction with a comprehensive set of controls. Adjust basic filters (like minimum word counts and alphanumeric ratio) and advanced filters (for code blocks, long concatenated words, and symbol-enclosed words). Each advanced filter has its own sensitivity sliders and toggles. All your settings are automatically saved and reloaded between sessions.
+Fine-tune your extraction. All your settings are automatically saved and reloaded between sessions.
 
 **2. Filter Test Pad (Resizable Middle Section):**
-Instantly see how your current filter settings will affect sample text. Paste your text into the input area, click "Process Pasted Text," and the filtered output appears immediately in the adjacent output area. This allows for quick and precise tuning of the filters.
+Instantly see affect on your sample text.
 
 **3. Process Files (Bottom Section):**
-Simply drag and drop your documents onto the designated area. The GC Text Extractor applies all your active filter settings and saves the cleaned text to a new file in the same directory as the original (e.g., `yourfile_txtextract123.txt`).
+Simply drag and drop. Saves the cleaned text to a new file in the same directory as the original + 'txtextract123.txt`.
+
+
+## Basic Filters
+
+* **Min Words (General Seq):** Define the minimum number of words a general, non-punctuated sequence of text must have to be kept.
+* **Min Words (Punctuated Sent.):** Set a specific minimum word count for text segments that end with sentence punctuation (like '.', '!', '?').
+* **Alphanumeric Filter:** A toggle (**ON/OFF** via a small slider) to enable a filter that checks the ratio of letters and numbers in a text segment.
+* **Alphanumeric Threshold (if ON):** If the Alphanumeric Filter is **ON**, this slider and entry box let you set the minimum required ratio (0.0 to 1.0) of alphanumeric characters. Segments below this ratio are discarded. This is a powerful first line of defense against code or very noisy text.
+
+## Advanced Word/Block Filters
+
+Each of these has a main toggle (checkbox) and then specific sensitivity controls that become active when the filter is enabled.
+
+### Attempt to remove code-like blocks
+When **ON** (checked), this filter tries to identify and completely remove segments that resemble computer code rather than natural language.
+* **Sensitivity:** You can control the minimum number of programming keywords, code symbols, and words in a segment to check, as well as the symbol density threshold.
+
+### Concatenated Word Filter
+This targets very long "words" that look like multiple words joined without spaces (e.g., `LongCamelCaseString`).
+* **Behavior Toggle:** `[ ] Remove long concatenated words entirely (don't abbreviate)`
+    * If **OFF** (unchecked), such words are abbreviated (e.g., `Long...String`).
+    * If **ON** (checked), they are completely removed.
+* **Sensitivity:** Controls for "Min Length to Check" (how long a token must be) and "Min Sub-Words to Act" (how many internal "words" it must split into).
+
+### Symbol-Enclosed Word Filter
+This removes words surrounded by symbols (e.g., `*important*`, `_variable_`).
+* **Main Toggle:** `[ ] Remove words enclosed by symbols`
+* **Sensitivity:** The "Max Symbols Around" setting defines how many symbols on each side of a word the filter will consider for removal along with the word.
 
 ## Installation
 
