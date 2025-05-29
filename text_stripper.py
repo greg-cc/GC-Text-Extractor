@@ -1,5 +1,5 @@
 """
-GC Text Extractor v1.6.3
+GC Text Extractor v1.6.4
 
 Overall Description:
 A desktop application built with Tkinter for extracting and filtering text from
@@ -154,6 +154,7 @@ Key Function Details:
 """
 
 
+
 import tkinter as tk
 from tkinter import ttk 
 from tkinter import (Label, Frame, IntVar, BooleanVar, DoubleVar, Scale, Entry, Checkbutton, Spinbox, Button, Text, Scrollbar, PanedWindow, Radiobutton,
@@ -164,7 +165,6 @@ import json
 import traceback
 from docx import Document
 import PyPDF2
-from urllib.parse import urlparse, urlunparse # For URL normalization (optional, can be simpler)
 
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
@@ -178,9 +178,9 @@ except ImportError:
         def Tk(): return tk.Tk()
     DND_FILES = None
 
-APP_VERSION = "1.6.0" # Added URL extraction, deduplication, and sorting
+APP_VERSION = "1.6.4" # Restored 3-column settings layout, includes all features
 
-# --- Default values (no change from 1.5.9) ---
+# --- Default values ---
 DEFAULT_MIN_WORDS_GENERAL = 11; DEFAULT_MIN_WORDS_SENTENCE = 5
 DEFAULT_ALPHANUM_ENABLED = 1; DEFAULT_ALPHANUM_THRESHOLD = 0.75 
 DEFAULT_ALPHANUM_MIN_LEN_FOR_RATIO = 5; DEFAULT_ALPHANUM_ABS_COUNT_FALLBACK = 15
@@ -191,6 +191,7 @@ DEFAULT_REMOVE_SYMBOL_ENCLOSED = 1; DEFAULT_MAX_SYMBOLS_AROUND = 3
 DEFAULT_CUSTOM_REGEX_ENABLED = 0; DEFAULT_CUSTOM_REGEX_PATTERN = ""; DEFAULT_CUSTOM_REGEX_MODE = "remove_matches"; DEFAULT_CUSTOM_REGEX_CASE_SENSITIVE = 0
 DEFAULT_CUSTOM_FILE_EXTENSIONS = ""
 DEFAULT_OUTPUT_FILE_SUFFIX = "_processed"
+DEFAULT_EXTRACT_URLS_ENABLED = 0 
 
 CODE_KEYWORDS_LIST = { 
     'var', 'let', 'const', 'function', 'return', 'this', 'class', 'constructor', 'new', 'Error', 'throw', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'try', 'catch', 'finally', 'import', 'export', 'super', 'extends', 'async', 'await', 'yield', 'true', 'false', 'null', 'undefined', 'typeof', 'instanceof', 'void', 'delete', 'prototype', 'static', 'get', 'set', 'document', 'window', 'JSON', 'Map', 'Promise', 'Object', 'Array', 'String', 'Number', 'Boolean', 'Symbol', '=>', '...','require','module','exports','googletag','pubads','slot', 'addEventListener','removeEventListener','querySelector','getElementById','getElementsByClassName', 'createElement','appendChild','innerHTML','outerHTML','style','console','log','warn','info', 'ajax','fetch','XMLHttpRequest','jQuery','angular','react','vue', 'webpack', 'chunk', 'props', 'state',
@@ -200,7 +201,7 @@ CODE_SYMBOLS_SET = {
     '{', '}', '(', ')', '[', ']', ';', '=', '<', '>', '%', ':', '-', '+', '!', '#', '$', '&', '*', '|', '~', '`', '/', '\\', '@', '^', '_'
 }
 
-# --- Global Tkinter Variables (declarations unchanged) ---
+# --- Global Tkinter Variables ---
 min_words_general_var, min_words_sentence_var = (None,) * 2
 alphanum_filter_enabled_var, alphanum_threshold_var, \
     alnum_min_len_for_ratio_var, alnum_abs_count_fallback_var = (None,) * 4
@@ -210,7 +211,8 @@ min_len_concat_check_var, min_sub_words_replace_var = (None,) * 2
 max_symbols_around_var = None
 min_code_keywords_var, min_code_symbols_var, min_words_code_check_var, code_symbol_density_var = (None,) * 4
 custom_regex_enabled_var, custom_regex_pattern_var, custom_regex_mode_var, custom_regex_case_sensitive_var, \
-custom_file_extensions_var, custom_output_suffix_var = (None,) * 6
+custom_file_extensions_var, custom_output_suffix_var, extract_urls_enabled_var = (None,) * 7
+
 
 SETTINGS_FILENAME = "text_extractor_settings.json"
 SETTINGS_CONFIG = {
@@ -223,6 +225,7 @@ SETTINGS_CONFIG = {
     'max_segment_len_var': (tk.IntVar, DEFAULT_MAX_SEGMENT_LEN_BEFORE_NEWLINE_SPLIT),
     'custom_file_extensions_var': (tk.StringVar, DEFAULT_CUSTOM_FILE_EXTENSIONS),
     'custom_output_suffix_var': (tk.StringVar, DEFAULT_OUTPUT_FILE_SUFFIX),   
+    'extract_urls_enabled_var': (tk.IntVar, DEFAULT_EXTRACT_URLS_ENABLED),
     'remove_code_blocks_var': (tk.IntVar, DEFAULT_REMOVE_CODE_BLOCKS), 
     'min_code_keywords_var': (tk.IntVar, DEFAULT_MIN_CODE_KEYWORDS),
     'min_code_symbols_var': (tk.IntVar, DEFAULT_MIN_CODE_SYMBOLS), 
@@ -240,11 +243,11 @@ SETTINGS_CONFIG = {
 }
 g_test_pad_input_text = None; g_test_pad_output_text = None
 
-def setup_variables(): # Unchanged
+def setup_variables(): 
     for var_name, (var_type, default_value) in SETTINGS_CONFIG.items():
         if globals().get(var_name) is None or not isinstance(globals().get(var_name), var_type):
             globals()[var_name] = var_type(value=default_value)
-def load_app_settings(): # Unchanged
+def load_app_settings(): 
     try:
         if os.path.exists(SETTINGS_FILENAME):
             with open(SETTINGS_FILENAME, 'r') as f: loaded_settings = json.load(f)
@@ -256,7 +259,7 @@ def load_app_settings(): # Unchanged
             print(f"INFO: Settings loaded from {SETTINGS_FILENAME}")
         else: print(f"INFO: No settings file ({SETTINGS_FILENAME}). Using compile-time defaults.")
     except Exception as e: print(f"ERROR: Failed to load settings: {e}. Using compile-time defaults.")
-def save_app_settings(): # Unchanged
+def save_app_settings(): 
     settings_to_save = {}
     for var_name in SETTINGS_CONFIG.keys():
         var_object = globals().get(var_name)
@@ -267,7 +270,6 @@ def save_app_settings(): # Unchanged
         print(f"INFO: Settings saved to {SETTINGS_FILENAME}")
     except Exception as e: print(f"ERROR: Failed to save settings: {e}")
 
-# --- UI Element Creation Helpers (unchanged) ---
 def create_entry_setting(parent, label_text, var, label_width=28, entry_width=30, indent=0, side_to_pack_label=LEFT, side_to_pack_entry=LEFT):
     frame = Frame(parent); frame.pack(side=TOP, fill=X, padx=5, pady=2)
     Label(frame, text=label_text, width=label_width, anchor=W).pack(side=side_to_pack_label, padx=(indent,5))
@@ -297,7 +299,7 @@ def create_synchronized_setting(parent, label_text, var, from_, to, resolution=N
         except tk.TclError: pass
     var.trace_add("write", _update_entry_from_scale); entry_var.trace_add("write", _update_scale_from_entry)
     _update_entry_from_scale()
-    return [frame.winfo_children()[0], entry, scale]
+    return [entry, scale] # Return stateful widgets: Entry, Scale
 def create_spinbox_setting(parent, label_text, var, from_, to, label_width=26, spinbox_width=5, indent=15, increment=1):
     frame = Frame(parent); frame.pack(side=TOP, fill=X, padx=5, pady=1)
     Label(frame, text=label_text, width=label_width, anchor=W).pack(side=LEFT, padx=(indent, 5))
@@ -310,22 +312,35 @@ def create_scale_setting(parent, label_text, var, from_, to, resolution, label_w
     scale = Scale(frame, variable=var, from_=from_, to=to, resolution=resolution, orient=HORIZONTAL, length=scale_length)
     scale.pack(side=LEFT, fill=X, expand=True, padx=5)
     return scale
-def toggle_controls_state(toggle_var, controls_list_of_widgets):
+def toggle_controls_state(toggle_var, controls_list_of_widgets): 
     new_state = NORMAL if toggle_var.get() == 1 else DISABLED
     for control_widget in controls_list_of_widgets:
-        if control_widget and hasattr(control_widget, 'configure'):
+        if control_widget and hasattr(control_widget, 'configure') and not isinstance(control_widget, tk.Label):
             try: control_widget.configure(state=new_state)
-            except tk.TclError as e: print(f"ERROR: TclError configuring widget {control_widget}: {e}")
+            except tk.TclError as e: 
+                if "unknown option \"-state\"" in str(e).lower() and isinstance(control_widget, (tk.Frame, ttk.Frame)):
+                    print(f"INFO: Cannot set -state for Frame widget {control_widget}. Iterating children.")
+                    for child in control_widget.winfo_children(): # Try to disable children of a frame
+                         if hasattr(child, 'configure') and not isinstance(child, tk.Label):
+                            try: child.configure(state=new_state)
+                            except tk.TclError: pass # Ignore if child also can't be stated
+                else:
+                    print(f"ERROR: TclError configuring widget {control_widget}: {e}")
 
-def populate_settings_content(parent_scrollable_frame): # Unchanged
+# --- MODIFIED: populate_settings_content for THREE columns ---
+def populate_settings_content(parent_scrollable_frame):
     column_container = ttk.Frame(parent_scrollable_frame); column_container.pack(fill=BOTH, expand=True)
-    left_column = ttk.Frame(column_container, padding=(0,0,10,0)); left_column.pack(side=LEFT, fill=Y, expand=False, anchor=NW)
-    right_column = ttk.Frame(column_container); right_column.pack(side=LEFT, fill=BOTH, expand=True, anchor=NW)
-    Label(left_column, text="Basic, Segmentation & File Settings:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-    create_synchronized_setting(left_column, "Min Words (General Seq):", min_words_general_var, 1, 100, is_int=True)
-    create_synchronized_setting(left_column, "Min Words (Punctuated Sent.):", min_words_sentence_var, 1, 50, is_int=True)
-    create_spinbox_setting(left_column, "Max Chars for Seg (b4 newline split):", max_segment_len_var, 50, 2000, increment=50, label_width=28, indent=0) 
-    alphanum_main_frame = Frame(left_column); alphanum_main_frame.pack(side=TOP, fill=X, padx=5, pady=(5,2)) 
+    col1_frame = ttk.Frame(column_container, padding=(0,0,10,0)); col1_frame.pack(side=LEFT, fill=Y, expand=False, anchor=NW, padx=(0,5))
+    col2_frame = ttk.Frame(column_container, padding=(0,0,10,0)); col2_frame.pack(side=LEFT, fill=Y, expand=False, anchor=NW, padx=(0,5))
+    col3_frame = ttk.Frame(column_container); col3_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW) # Last column expands more
+
+    # --- Column 1: Basic Text Filters & Segmentation ---
+    Label(col1_frame, text="Basic, Segmentation & Alphanum:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
+    create_synchronized_setting(col1_frame, "Min Words (General Seq):", min_words_general_var, 1, 100, is_int=True, label_width=26)
+    create_synchronized_setting(col1_frame, "Min Words (Punctuated Sent.):", min_words_sentence_var, 1, 50, is_int=True, label_width=26)
+    create_spinbox_setting(col1_frame, "Max Chars Seg (for newline split):", max_segment_len_var, 50, 2000, increment=50, label_width=26, indent=0) 
+    
+    alphanum_main_frame = Frame(col1_frame); alphanum_main_frame.pack(side=TOP, fill=X, padx=5, pady=(5,0)) 
     Label(alphanum_main_frame, text="Alphanumeric Filter:", width=28, anchor=W).pack(side=LEFT)
     filter_status_label_var = tk.StringVar(value="ON" if alphanum_filter_enabled_var.get() == 1 else "OFF")
     alnum_sensitivity_controls = [] 
@@ -333,67 +348,92 @@ def populate_settings_content(parent_scrollable_frame): # Unchanged
         filter_status_label_var.set("ON" if alphanum_filter_enabled_var.get() == 1 else "OFF")
         toggle_controls_state(alphanum_filter_enabled_var, alnum_sensitivity_controls)
     alphanum_filter_enabled_var.trace_add("write", update_alphanum_status_and_toggle)
-    Scale(alphanum_main_frame, variable=alphanum_filter_enabled_var, from_=0, to=1, resolution=1, orient=HORIZONTAL, length=80, showvalue=0).pack(side=LEFT, padx=5)
-    Label(alphanum_main_frame, textvariable=filter_status_label_var, width=5).pack(side=LEFT)
-    ratio_frame_parent = Frame(left_column); ratio_frame_parent.pack(fill=X, padx=(20,0)) 
-    # create_synchronized_setting returns a list of [Label, Entry, Scale]
-    ratio_widgets = create_synchronized_setting(ratio_frame_parent, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, resolution=0.01, is_int=False, label_width=26)
-    alnum_sensitivity_controls.extend(ratio_widgets) # Add all created widgets to the list
-    alnum_sensitivity_controls.append(create_spinbox_setting(left_column, "Min Seg Len for Ratio Test:", alnum_min_len_for_ratio_var, 1, 50, label_width=26, indent=20))
-    alnum_sensitivity_controls.append(create_spinbox_setting(left_column, "Abs Alnum Fallback Count:", alnum_abs_count_fallback_var, 0, 100, label_width=26, indent=20))
-    update_alphanum_status_and_toggle() 
-    create_entry_setting(left_column, "Custom Input Exts (,.ext):", custom_file_extensions_var, entry_width=35, label_width=28)
-    create_entry_setting(left_column, "Output File Suffix:", custom_output_suffix_var, entry_width=35, label_width=28)
-    Label(left_column, text=" (e.g., _cleaned. Appended before final .txt ext)", font=('Helvetica', 8, 'italic')).pack(side=TOP, anchor=W, padx=10, pady=(0,5))
-    Label(right_column, text="Advanced Word/Block Filters:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-    code_filter_frame_right = Frame(right_column); code_filter_frame_right.pack(side=TOP, fill=X, padx=5, pady=2)
-    cb_remove_code = Checkbutton(code_filter_frame_right, text="Attempt to remove code-like blocks", variable=remove_code_blocks_var)
-    cb_remove_code.pack(side=TOP, anchor=W); temp_code_controls = []
-    temp_code_controls.append(create_spinbox_setting(code_filter_frame_right, "Min Keywords:", min_code_keywords_var, 0, 20))
-    temp_code_controls.append(create_spinbox_setting(code_filter_frame_right, "Min Code Symbols:", min_code_symbols_var, 0, 30))
-    temp_code_controls.append(create_spinbox_setting(code_filter_frame_right, "Min Words in Segment:", min_words_code_check_var, 1, 20))
-    temp_code_controls.append(create_scale_setting(code_filter_frame_right, "Symbol Density >", code_symbol_density_var, 0.01, 0.5, 0.01, scale_length=120))
-    remove_code_blocks_var.trace_add("write", lambda *args: toggle_controls_state(remove_code_blocks_var, temp_code_controls))
-    toggle_controls_state(remove_code_blocks_var, temp_code_controls)
-    concat_filter_frame_right = Frame(right_column); concat_filter_frame_right.pack(side=TOP, fill=X, padx=5, pady=2)
-    cb_remove_concat = Checkbutton(concat_filter_frame_right, text="Remove long concatenated words entirely", variable=remove_concat_entirely_var)
-    cb_remove_concat.pack(side=TOP, anchor=W)
-    create_spinbox_setting(concat_filter_frame_right, "Min Length to Check:", min_len_concat_check_var, 10, 50)
-    create_spinbox_setting(concat_filter_frame_right, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10)
-    symbol_filter_frame_right = Frame(right_column); symbol_filter_frame_right.pack(side=TOP, fill=X, padx=5, pady=2)
-    cb_remove_symbol = Checkbutton(symbol_filter_frame_right, text="Remove words enclosed by symbols", variable=remove_symbol_enclosed_var)
-    cb_remove_symbol.pack(side=TOP, anchor=W); temp_symbol_controls = []
-    temp_symbol_controls.append(create_spinbox_setting(symbol_filter_frame_right, "Max Symbols Around:", max_symbols_around_var, 1, 5))
-    remove_symbol_enclosed_var.trace_add("write", lambda *args: toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls))
-    toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls)
-    regex_filter_frame_right = Frame(right_column, bd=1, relief=SUNKEN); regex_filter_frame_right.pack(side=TOP, fill=X, padx=5, pady=(10,2))
-    Label(regex_filter_frame_right, text="Custom Regex Filter:", font=('Helvetica', 10, 'bold')).pack(side=TOP, anchor=NW, padx=5, pady=(0,2))
-    cb_custom_regex = Checkbutton(regex_filter_frame_right, text="Enable Custom Regex Filter", variable=custom_regex_enabled_var)
-    cb_custom_regex.pack(side=TOP, anchor=W, padx=5); temp_regex_controls = []
-    regex_entry_widget = create_entry_setting(regex_filter_frame_right, "Regex Pattern:", custom_regex_pattern_var, entry_width=40, indent=15)
+    Scale(alphanum_main_frame, variable=alphanum_filter_enabled_var, from_=0, to=1, resolution=1, orient=HORIZONTAL, length=60, showvalue=0).pack(side=LEFT, padx=2)
+    Label(alphanum_main_frame, textvariable=filter_status_label_var, width=4).pack(side=LEFT)
+    
+    ratio_frame_parent = Frame(col1_frame); ratio_frame_parent.pack(fill=X, padx=(20,0), pady=0) 
+    # create_synchronized_setting returns [Entry, Scale] which are stateful
+    ratio_widgets = create_synchronized_setting(ratio_frame_parent, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, resolution=0.01, is_int=False, label_width=24, control_length=120)
+    alnum_sensitivity_controls.extend(ratio_widgets)
+    alnum_sensitivity_controls.append(create_spinbox_setting(col1_frame, "Min Seg Len for Ratio Test:", alnum_min_len_for_ratio_var, 1, 50, label_width=24, indent=20))
+    alnum_sensitivity_controls.append(create_spinbox_setting(col1_frame, "Abs Alnum Fallback Count:", alnum_abs_count_fallback_var, 0, 100, label_width=24, indent=20))
+    update_alphanum_status_and_toggle() # Initial state for sensitivity controls
+
+    # --- Column 2: File Handling & Output Options, Main Advanced Toggles ---
+    Label(col2_frame, text="File & Output / Adv. Toggles:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
+    create_entry_setting(col2_frame, "Custom Input Exts (,.ext):", custom_file_extensions_var, entry_width=25, label_width=22)
+    create_entry_setting(col2_frame, "Output File Suffix:", custom_output_suffix_var, entry_width=25, label_width=22)
+    Label(col2_frame, text="(e.g., _cleaned -> name_cleaned.txt)", font=('Helvetica', 8, 'italic')).pack(side=TOP, anchor=W, padx=10, pady=(0,5))
+    
+    url_extract_frame = Frame(col2_frame); url_extract_frame.pack(side=TOP, fill=X, padx=5, pady=(5,2))
+    Checkbutton(url_extract_frame, text="Extract and list URLs from text", variable=extract_urls_enabled_var).pack(side=LEFT, anchor=W)
+
+    Label(col2_frame, text="--- Advanced Filter Toggles ---", font=('Helvetica', 9, 'italic')).pack(side=TOP, pady=(10,2), anchor=NW, padx=5)
+    cb_remove_code = Checkbutton(col2_frame, text="Enable Code Block Filter", variable=remove_code_blocks_var)
+    cb_remove_code.pack(side=TOP, anchor=W, padx=15)
+    cb_remove_concat = Checkbutton(col2_frame, text="Enable Concatenated Word Filter", variable=remove_concat_entirely_var) 
+    cb_remove_concat.pack(side=TOP, anchor=W, padx=15) 
+    cb_remove_symbol = Checkbutton(col2_frame, text="Enable Symbol-Enclosed Filter", variable=remove_symbol_enclosed_var)
+    cb_remove_symbol.pack(side=TOP, anchor=W, padx=15)
+    cb_custom_regex = Checkbutton(col2_frame, text="Enable Custom Regex Filter", variable=custom_regex_enabled_var)
+    cb_custom_regex.pack(side=TOP, anchor=W, padx=15)
+
+    # --- Column 3: Advanced Filter Sensitivity Details ---
+    Label(col3_frame, text="Advanced Sensitivity Details:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
+    
+    # Sensitivity for Code Block Filter
+    code_sensitivity_label = Label(col3_frame, text="Code Filter Sensitivity:", font=('Helvetica', 9, 'italic'))
+    code_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    temp_code_controls = []
+    temp_code_controls.append(create_spinbox_setting(col3_frame, "Min Keywords:", min_code_keywords_var, 0, 20, label_width=20))
+    temp_code_controls.append(create_spinbox_setting(col3_frame, "Min Code Symbols:", min_code_symbols_var, 0, 30, label_width=20))
+    temp_code_controls.append(create_spinbox_setting(col3_frame, "Min Words in Segment:", min_words_code_check_var, 1, 20, label_width=20))
+    temp_code_controls.append(create_scale_setting(col3_frame, "Symbol Density >", code_symbol_density_var, 0.01, 0.5, 0.01, scale_length=100, label_width=20))
+    remove_code_blocks_var.trace_add("write", lambda *args: toggle_controls_state(remove_code_blocks_var, temp_code_controls + [code_sensitivity_label]))
+    toggle_controls_state(remove_code_blocks_var, temp_code_controls + [code_sensitivity_label])
+
+    # Sensitivity for Concatenated Word Filter (main toggle is for behavior, these define what is "concatenated")
+    concat_sensitivity_label = Label(col3_frame, text="Concatenated Word Def.:", font=('Helvetica', 9, 'italic'))
+    concat_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    create_spinbox_setting(col3_frame, "Min Length to Check:", min_len_concat_check_var, 10, 50, label_width=20)
+    create_spinbox_setting(col3_frame, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10, label_width=20)
+
+    # Sensitivity for Symbol-Enclosed Word Filter
+    symbol_sensitivity_label = Label(col3_frame, text="Symbol-Enclosed Sensitivity:", font=('Helvetica', 9, 'italic'))
+    symbol_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    temp_symbol_controls = []
+    temp_symbol_controls.append(create_spinbox_setting(col3_frame, "Max Symbols Around:", max_symbols_around_var, 1, 5, label_width=20))
+    remove_symbol_enclosed_var.trace_add("write", lambda *args: toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label]))
+    toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label])
+
+    # Sensitivity for Custom Regex Filter
+    regex_sensitivity_label = Label(col3_frame, text="Custom Regex Details:", font=('Helvetica', 9, 'italic'))
+    regex_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    temp_regex_controls = []
+    regex_entry_widget = create_entry_setting(col3_frame, "Regex Pattern:", custom_regex_pattern_var, entry_width=25, indent=15, label_width=20)
     temp_regex_controls.append(regex_entry_widget)
-    regex_mode_frame = Frame(regex_filter_frame_right); regex_mode_frame.pack(side=TOP, fill=X, padx=(20,5))
-    Label(regex_mode_frame, text="Mode:").pack(side=LEFT)
-    rb_remove = Radiobutton(regex_mode_frame, text="Remove Matches", variable=custom_regex_mode_var, value="remove_matches")
-    rb_remove.pack(side=LEFT, padx=2); temp_regex_controls.append(rb_remove)
-    rb_keep = Radiobutton(regex_mode_frame, text="Keep Matches Only", variable=custom_regex_mode_var, value="keep_matches")
-    rb_keep.pack(side=LEFT, padx=2); temp_regex_controls.append(rb_keep)
-    cb_case_sensitive = Checkbutton(regex_filter_frame_right, text="Case Sensitive", variable=custom_regex_case_sensitive_var)
-    cb_case_sensitive.pack(side=TOP, anchor=W, padx=20); temp_regex_controls.append(cb_case_sensitive)
-    custom_regex_enabled_var.trace_add("write", lambda *args: toggle_controls_state(custom_regex_enabled_var, temp_regex_controls))
-    toggle_controls_state(custom_regex_enabled_var, temp_regex_controls)
+    regex_mode_frame_col3 = Frame(col3_frame); regex_mode_frame_col3.pack(side=TOP, fill=X, padx=(20,5))
+    Label(regex_mode_frame_col3, text="Mode:").pack(side=LEFT)
+    rb_remove = Radiobutton(regex_mode_frame_col3, text="Remove", variable=custom_regex_mode_var, value="remove_matches")
+    rb_remove.pack(side=LEFT, padx=1); temp_regex_controls.append(rb_remove)
+    rb_keep = Radiobutton(regex_mode_frame_col3, text="Keep Only", variable=custom_regex_mode_var, value="keep_matches")
+    rb_keep.pack(side=LEFT, padx=1); temp_regex_controls.append(rb_keep)
+    cb_case_sensitive = Checkbutton(regex_mode_frame_col3, text="Case Sens.", variable=custom_regex_case_sensitive_var)
+    cb_case_sensitive.pack(side=LEFT, padx=2); temp_regex_controls.append(cb_case_sensitive)
+    custom_regex_enabled_var.trace_add("write", lambda *args: toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label, regex_mode_frame_col3]))
+    toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label, regex_mode_frame_col3])
 
 
-# --- Text Extraction and Processing Logic ---
-def extract_text_from_txt(filepath): # Unchanged
+# --- Text Extraction and Processing Logic (as in v1.5.9) ---
+def extract_text_from_txt(filepath): # ... (as in v1.5.9)
     try:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f: return f.read()
     except Exception as e: print(f"Error reading .txt {filepath}: {e}"); status_label.config(text=f"Error reading .txt: {os.path.basename(filepath)}"); return ""
-def extract_text_from_docx(filepath): # Unchanged
+def extract_text_from_docx(filepath): # ... (as in v1.5.9)
     try:
         doc = Document(filepath); return '\n'.join([para.text for para in doc.paragraphs])
     except Exception as e: print(f"Error reading .docx {filepath}: {e}"); status_label.config(text=f"Error reading .docx: {os.path.basename(filepath)}"); return ""
-def extract_text_from_pdf(filepath): # Unchanged
+def extract_text_from_pdf(filepath): # ... (as in v1.5.9)
     text = "";
     try:
         with open(filepath, 'rb') as f:
@@ -404,18 +444,18 @@ def extract_text_from_pdf(filepath): # Unchanged
             for page in reader.pages: page_text = page.extract_text(); text += (page_text + "\n") if page_text else ""
     except Exception as e: print(f"Error reading .pdf {filepath}: {e}"); status_label.config(text=f"Error reading .pdf: {os.path.basename(filepath)}"); return ""
     return text
-def get_alphanumeric_ratio(text_segment): # Unchanged
+def get_alphanumeric_ratio(text_segment): # ... (as in v1.5.9)
     if not text_segment: return 0.0
     alphanumeric_chars = sum(1 for char in text_segment if char.isalnum())
     return alphanumeric_chars / len(text_segment) if len(text_segment) > 0 else 0.0
-def is_sentence_or_long_sequence(text_segment, min_words_general_sequence=6, min_words_punctuated_sentence=2): # Unchanged
+def is_sentence_or_long_sequence(text_segment, min_words_general_sequence=6, min_words_punctuated_sentence=2): # ... (as in v1.5.9)
     stripped_segment = text_segment.strip();
     if not stripped_segment: return False
     words = stripped_segment.split(); word_count = len(words)
     if stripped_segment.endswith(('.', '!', '?')) and word_count >= min_words_punctuated_sentence: return True
     if word_count >= min_words_general_sequence: return True
     return False
-def split_concatenated_token(token): # Unchanged
+def split_concatenated_token(token): # ... (as in v1.5.9)
     if not token: return []
     s1 = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", token)
     s2 = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s1)
@@ -423,19 +463,18 @@ def split_concatenated_token(token): # Unchanged
     s4 = re.sub(r"(\d)([a-zA-Z])", r"\1 \2", s3)
     return [word for word in s4.split(' ') if word]
 def is_code_like_segment(segment_text, words_in_segment, 
-                         min_keywords, min_symbols, min_words_check, symbol_density_thresh): # Unchanged
+                         min_keywords, min_symbols, min_words_check, symbol_density_thresh): # ... (as in v1.5.9)
     if len(words_in_segment) < min_words_check: return False 
     keyword_hits = sum(1 for word in words_in_segment if word in CODE_KEYWORDS_LIST or word.lower() in CODE_KEYWORDS_LIST)
     segment_len = len(segment_text)
     if segment_len == 0: return False
-    symbol_hits = sum(1 for char in segment_text if char in CODE_SYMBOLS_SET)
+    symbol_hits = sum(1 for char in segment_text if char in CODE_SYMBOLS_SET) 
     current_symbol_density = symbol_hits / segment_len if segment_len > 0 else 0
     cond1 = (keyword_hits >= min_keywords and symbol_hits >= min_symbols)
     cond2 = (current_symbol_density > symbol_density_thresh)
     cond3 = (symbol_hits > (min_symbols * 2.5) and keyword_hits >= max(0, min_keywords // 2) ) 
     if cond1 or cond2 or cond3: return True
     return False
-
 def process_text(full_text, min_words_general, min_words_sentence, 
                  apply_alphanumeric_filter, alphanumeric_threshold, 
                  alnum_min_len_ratio_check, alnum_abs_fallback, 
@@ -443,13 +482,12 @@ def process_text(full_text, min_words_general, min_words_sentence,
                  do_remove_symbol_enclosed, symbol_max_around,
                  do_remove_code_blocks, code_min_kw, code_min_sym, code_min_words_seg, code_sym_dens,
                  custom_regex_on, custom_regex_pat, custom_regex_mode_val, custom_regex_cs,
-                 max_segment_len_for_nl_split): # Unchanged (uses new params)
-    
+                 max_segment_len_for_nl_split): # ... (as in v1.5.9)
     extracted_content = []
     if not full_text or not full_text.strip(): return ""
     processed_full_text = re.sub(r'(<[^>]+>)', r'\n\1\n', full_text) 
     processed_full_text = re.sub(r'\s*\n\s*', '\n', processed_full_text).strip()
-    paragraphs = re.split(r'\n{2,}', processed_full_text)
+    paragraphs = re.split(r'\n{2,}', processed_full_text) 
     segments_for_filtering = []
     for para_text in paragraphs:
         if not para_text.strip(): continue
@@ -460,9 +498,8 @@ def process_text(full_text, min_words_general, min_words_sentence,
             split_by_newline_further = False
             if len(sentence_candidates) == 1 and s_candidate_stripped == para_text.strip() and "\n" in s_candidate_stripped:
                 split_by_newline_further = True
-            elif len(s_candidate_stripped) > max_segment_len_for_nl_split: # Use new setting
-                if "\n" in s_candidate_stripped: # Only split if newlines are present
-                    split_by_newline_further = True
+            elif len(s_candidate_stripped) > max_segment_len_for_nl_split and "\n" in s_candidate_stripped: 
+                split_by_newline_further = True
             if split_by_newline_further:
                 for line in s_candidate_stripped.splitlines():
                     if line.strip(): segments_for_filtering.append(line.strip())
@@ -470,7 +507,6 @@ def process_text(full_text, min_words_general, min_words_sentence,
                 segments_for_filtering.append(s_candidate_stripped)
     if not segments_for_filtering and processed_full_text.strip():
         segments_for_filtering = [line.strip() for line in processed_full_text.splitlines() if line.strip()]
-
     compiled_regex = None
     if custom_regex_on and custom_regex_pat:
         try:
@@ -479,7 +515,6 @@ def process_text(full_text, min_words_general, min_words_sentence,
         except re.error as e:
             print(f"ERROR: Invalid custom regex: '{custom_regex_pat}' - {e}")
             status_label.config(text=f"Error: Invalid custom regex pattern!")
-
     final_segments_before_regex = []
     for segment_text in segments_for_filtering: 
         current_segment_to_check = segment_text
@@ -519,7 +554,6 @@ def process_text(full_text, min_words_general, min_words_sentence,
             modified_segment = re.sub(symbol_pattern, '', modified_segment)
             modified_segment = ' '.join(modified_segment.split())
         if modified_segment.strip(): final_segments_before_regex.append(modified_segment)
-
     if custom_regex_on and compiled_regex:
         output_after_regex = []
         for segment in final_segments_before_regex:
@@ -532,67 +566,51 @@ def process_text(full_text, min_words_general, min_words_sentence,
     else:
         extracted_content = final_segments_before_regex
     return "\n\n".join(extracted_content)
-
-# --- New Function: extract_and_format_urls ---
-def extract_and_format_urls(text_content):
-    """Extracts, deduplicates, sorts, and formats URLs from text."""
-    # A fairly comprehensive regex for URLs
-    url_pattern = re.compile(
-        r'(?:(?:https?|ftp):\/\/|www\.)'  # Scheme or www
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
-        r'localhost|'  # localhost...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-        r'(?::\d+)?'  # optional port
-        r'(?:/?|[/?]\S+)', re.IGNORECASE)
-    
-    found_urls = url_pattern.findall(text_content)
-    
-    if not found_urls:
-        return "", []
-
-    # Normalize for deduplication and sorting: lowercase, add http to www, strip trailing /
-    normalized_for_dedupe = {} # Store original casing keyed by normalized version
-    for url in found_urls:
-        u_stripped = url.strip().rstrip('/')
-        u_lower = u_stripped.lower()
-        if u_lower.startswith('www.') and not u_lower.startswith('http'):
-            u_norm_key = 'http://' + u_lower
-            u_display = 'http://' + u_stripped
-        else:
-            u_norm_key = u_lower
-            u_display = u_stripped
-        
-        if u_norm_key not in normalized_for_dedupe:
-            normalized_for_dedupe[u_norm_key] = u_display # Keep first encountered casing
-
+def extract_and_format_urls(text_content): # Unchanged
+    # ... (as in v1.6.2)
+    print(f"\nDEBUG_URL: Received text for URL extraction (first 300 chars): '{text_content[:300]}...'")
+    url_pattern = re.compile(r'(?:(?:https?|ftp):\/\/|www\.)(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,12}|localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?(?:[/?#][^\s"<>()\[\]]*|\b)', re.IGNORECASE)
+    found_urls_raw = []
+    for match in url_pattern.finditer(text_content):
+        url = match.group(0); cleaned_url = re.sub(r'[.,;:!?]$', '', url); cleaned_url = cleaned_url.rstrip(')\'"<'); found_urls_raw.append(cleaned_url)
+    print(f"DEBUG_URL: Raw URLs found by regex: {found_urls_raw}")
+    if not found_urls_raw: print("DEBUG_URL: No raw URLs found by regex."); return "", []
+    normalized_for_dedupe = {} 
+    for url in found_urls_raw:
+        u_stripped = url.strip().rstrip('/'); u_lower_key = u_stripped.lower()
+        if u_lower_key.startswith('www.') and not (u_lower_key.startswith('http://') or u_lower_key.startswith('https://')):
+            u_display = 'http://' + u_stripped; u_norm_key = 'http://' + u_lower_key
+        else: u_display = u_stripped; u_norm_key = u_lower_key
+        if u_norm_key not in normalized_for_dedupe: normalized_for_dedupe[u_norm_key] = u_display
     unique_display_urls = sorted(list(normalized_for_dedupe.values()), key=lambda x: (x.lower(), x))
-
+    print(f"DEBUG_URL: Unique sorted display URLs: {unique_display_urls}")
     if unique_display_urls:
         url_list_string = "\n\n--- Detected URLs ---\n" + "\n".join(unique_display_urls)
+        print(f"DEBUG_URL: Formatted URL string created (length {len(url_list_string)}).")
         return url_list_string, unique_display_urls
+    print("DEBUG_URL: No unique display URLs after processing, returning empty.")
     return "", []
 
-# --- File Processing Orchestration (MODIFIED to include URL extraction) ---
-def process_file(filepath):
+# --- File Processing Orchestration (unchanged) ---
+def process_file(filepath): # ... (as in v1.6.2)
     global status_label
     if not os.path.exists(filepath): status_label.config(text=f"Error: File not found {filepath}"); return
-    
     filename_base, extension_raw = os.path.splitext(filepath); extension = extension_raw.lower()
     raw_custom_ext_str = custom_file_extensions_var.get()
     parsed_custom_extensions = []
     if raw_custom_ext_str:
         parsed_custom_extensions = [ext.strip().lower() for ext in raw_custom_ext_str.split(',') if ext.strip().startswith('.')]
-    full_text = ""; status_label.config(text=f"Processing: {os.path.basename(filepath)}..."); root.update_idletasks()
-    
-    if extension == '.txt' or extension in parsed_custom_extensions: full_text = extract_text_from_txt(filepath)
-    elif extension == '.docx': full_text = extract_text_from_docx(filepath)
-    elif extension == '.pdf': full_text = extract_text_from_pdf(filepath)
+    raw_full_text = ""; status_label.config(text=f"Processing: {os.path.basename(filepath)}..."); root.update_idletasks()
+    if extension == '.txt' or extension in parsed_custom_extensions: raw_full_text = extract_text_from_txt(filepath)
+    elif extension == '.docx': raw_full_text = extract_text_from_docx(filepath)
+    elif extension == '.pdf': raw_full_text = extract_text_from_pdf(filepath)
     else: status_label.config(text=f"Unsupported or unlisted file type: {extension}"); return
-    if not full_text or not full_text.strip(): status_label.config(text=f"No text extracted from {os.path.basename(filepath)}."); return
-    
+    if not raw_full_text or not raw_full_text.strip(): status_label.config(text=f"No text extracted from {os.path.basename(filepath)}."); return
+    formatted_urls_from_raw = ""
+    if extract_urls_enabled_var.get() == 1:
+        formatted_urls_from_raw, _ = extract_and_format_urls(raw_full_text)
     params = {var_name: globals()[var_name].get() for var_name in SETTINGS_CONFIG.keys()}
-    
-    processed_text_content = process_text(full_text, 
+    processed_text_content = process_text(raw_full_text, 
                                   params['min_words_general_var'], params['min_words_sentence_var'],
                                   True if params['alphanum_filter_enabled_var'] == 1 else False, 
                                   params['alphanum_threshold_var'],
@@ -610,68 +628,24 @@ def process_file(filepath):
                                   params['custom_regex_mode_var'],
                                   True if params['custom_regex_case_sensitive_var'] == 1 else False,
                                   params['max_segment_len_var'])
-                                  
-    if not processed_text_content or not processed_text_content.strip(): 
-        status_label.config(text=f"No content passed filters for {os.path.basename(filepath)}."); return
-    
-    # Extract and append URLs
-    formatted_urls, _ = extract_and_format_urls(processed_text_content) # Use the content that passed all filters
-    final_output_data = processed_text_content + formatted_urls
-    
+    final_output_data = processed_text_content
+    if not final_output_data.strip() and formatted_urls_from_raw:
+        final_output_data = "<No main content passed filters>" + formatted_urls_from_raw
+    elif final_output_data.strip() and formatted_urls_from_raw:
+        final_output_data += formatted_urls_from_raw
+    if not final_output_data.strip() : status_label.config(text=f"No content passed filters for {os.path.basename(filepath)}."); return
     user_suffix = custom_output_suffix_var.get().strip()
     actual_suffix = user_suffix if user_suffix else DEFAULT_OUTPUT_FILE_SUFFIX 
     output_filepath = filename_base + actual_suffix + ".txt"
     try:
         with open(output_filepath, 'w', encoding='utf-8') as f_out: f_out.write(final_output_data)
         status_label.config(text=f"Successfully processed: {os.path.basename(filepath)}\nSaved to: {os.path.basename(output_filepath)}")
-        if formatted_urls:
-            print(f"INFO: URLs extracted and appended to {os.path.basename(output_filepath)}")
+        if extract_urls_enabled_var.get() == 1 and formatted_urls_from_raw: print(f"INFO: URLs appended to {os.path.basename(output_filepath)}")
     except Exception as e: print(f"Error writing output {output_filepath}: {e}"); status_label.config(text=f"Error writing output for {os.path.basename(filepath)}: {e}")
 
-# --- Filter Test Pad Functions (MODIFIED to include URL extraction in display) ---
-def process_pasted_text():
+# --- Filter Test Pad UI Population & Logic (unchanged) ---
+def populate_test_pad_ui(parent_frame): # ... (as in v1.5.9)
     global g_test_pad_input_text, g_test_pad_output_text
-    if g_test_pad_input_text is None or g_test_pad_output_text is None: print("ERROR: Test pad text widgets not initialized."); return
-    if 'min_words_general_var' not in globals() or globals()['min_words_general_var'] is None: setup_variables(); load_app_settings() 
-    
-    input_text = g_test_pad_input_text.get("1.0", tk.END).strip()
-    if not input_text:
-        g_test_pad_output_text.config(state=tk.NORMAL); g_test_pad_output_text.delete("1.0", tk.END)
-        g_test_pad_output_text.insert(tk.END, "Input text is empty."); g_test_pad_output_text.config(state=tk.DISABLED)
-        return
-
-    params = {var_name: globals()[var_name].get() for var_name in SETTINGS_CONFIG.keys()}
-    
-    processed_text_content = process_text(input_text, 
-                                  params['min_words_general_var'], params['min_words_sentence_var'],
-                                  True if params['alphanum_filter_enabled_var'] == 1 else False, 
-                                  params['alphanum_threshold_var'],
-                                  params['alnum_min_len_for_ratio_var'], 
-                                  params['alnum_abs_count_fallback_var'], 
-                                  True if params['remove_concat_entirely_var'] == 1 else False, 
-                                  params['min_len_concat_check_var'], params['min_sub_words_replace_var'],
-                                  True if params['remove_symbol_enclosed_var'] == 1 else False, 
-                                  params['max_symbols_around_var'],
-                                  True if params['remove_code_blocks_var'] == 1 else False, 
-                                  params['min_code_keywords_var'], params['min_code_symbols_var'],
-                                  params['min_words_code_check_var'], params['code_symbol_density_var'],
-                                  True if params['custom_regex_enabled_var'] == 1 else False,
-                                  params['custom_regex_pattern_var'],
-                                  params['custom_regex_mode_var'],
-                                  True if params['custom_regex_case_sensitive_var'] == 1 else False,
-                                  params['max_segment_len_var'])
-    
-    final_display_output = processed_text_content if processed_text_content.strip() else "<No content passed filters>"
-    if processed_text_content.strip(): # Only extract URLs if there's processed text
-        formatted_urls, _ = extract_and_format_urls(processed_text_content)
-        final_display_output += formatted_urls # Append URLs to the display
-
-    g_test_pad_output_text.config(state=tk.NORMAL); g_test_pad_output_text.delete("1.0", tk.END)
-    g_test_pad_output_text.insert(tk.END, final_display_output)
-    g_test_pad_output_text.config(state=tk.DISABLED)
-
-def populate_test_pad_ui(parent_frame): # Unchanged
-    global g_test_pad_input_text, g_test_pad_output_text # ... (as in v1.5.5)
     pw = PanedWindow(parent_frame, orient=HORIZONTAL, sashrelief=RAISED, sashwidth=6)
     pw.pack(side=TOP, fill=BOTH, expand=True, padx=5, pady=5)
     input_pane = Frame(pw, relief=SUNKEN, borderwidth=1);
@@ -688,9 +662,44 @@ def populate_test_pad_ui(parent_frame): # Unchanged
     g_test_pad_output_text.pack(side=LEFT, fill=BOTH, expand=True); pw.add(output_pane, stretch="always", width=350)
     process_button = Button(parent_frame, text="Process Pasted Text (using current settings)", command=process_pasted_text)
     process_button.pack(side=TOP, pady=(0,5))
+def process_pasted_text(): # ... (as in v1.6.2)
+    global g_test_pad_input_text, g_test_pad_output_text
+    if g_test_pad_input_text is None or g_test_pad_output_text is None: print("ERROR: Test pad text widgets not initialized."); return
+    if 'min_words_general_var' not in globals() or globals()['min_words_general_var'] is None: setup_variables(); load_app_settings() 
+    raw_input_text = g_test_pad_input_text.get("1.0", tk.END).strip()
+    if not raw_input_text:
+        g_test_pad_output_text.config(state=tk.NORMAL); g_test_pad_output_text.delete("1.0", tk.END)
+        g_test_pad_output_text.insert(tk.END, "Input text is empty."); g_test_pad_output_text.config(state=tk.DISABLED)
+        return
+    params = {var_name: globals()[var_name].get() for var_name in SETTINGS_CONFIG.keys()}
+    processed_text_content = process_text(raw_input_text, 
+                                  params['min_words_general_var'], params['min_words_sentence_var'],
+                                  True if params['alphanum_filter_enabled_var'] == 1 else False, 
+                                  params['alphanum_threshold_var'],
+                                  params['alnum_min_len_for_ratio_var'], 
+                                  params['alnum_abs_count_fallback_var'], 
+                                  True if params['remove_concat_entirely_var'] == 1 else False, 
+                                  params['min_len_concat_check_var'], params['min_sub_words_replace_var'],
+                                  True if params['remove_symbol_enclosed_var'] == 1 else False, 
+                                  params['max_symbols_around_var'],
+                                  True if params['remove_code_blocks_var'] == 1 else False, 
+                                  params['min_code_keywords_var'], params['min_code_symbols_var'],
+                                  params['min_words_code_check_var'], params['code_symbol_density_var'],
+                                  True if params['custom_regex_enabled_var'] == 1 else False,
+                                  params['custom_regex_pattern_var'],
+                                  params['custom_regex_mode_var'],
+                                  True if params['custom_regex_case_sensitive_var'] == 1 else False,
+                                  params['max_segment_len_var'])
+    final_display_output = processed_text_content if processed_text_content.strip() else "<No main content passed filters>"
+    if extract_urls_enabled_var.get() == 1 and raw_input_text.strip() : 
+        formatted_urls_output, _ = extract_and_format_urls(raw_input_text) 
+        if formatted_urls_output: final_display_output += formatted_urls_output
+    g_test_pad_output_text.config(state=tk.NORMAL); g_test_pad_output_text.delete("1.0", tk.END)
+    g_test_pad_output_text.insert(tk.END, final_display_output)
+    g_test_pad_output_text.config(state=tk.DISABLED)
 
 # --- Drop Handler (unchanged) ---
-def drop_handler(event): # ... (as in v1.5.5)
+def drop_handler(event): # ... (as in v1.5.9)
     filepaths_str = event.data;
     if not filepaths_str: return
     paths = []
@@ -714,7 +723,7 @@ root.protocol("WM_DELETE_WINDOW", on_main_window_close)
 settings_container_frame = Frame(root, relief=SUNKEN, borderwidth=1); settings_container_frame.pack(side=TOP, fill=X, padx=7, pady=(7,0))
 Label(settings_container_frame, text="Filter Settings", font=('Helvetica', 12, 'bold')).pack(anchor=W, padx=5, pady=(5,2))
 settings_scroll_canvas_frame = Frame(settings_container_frame); settings_scroll_canvas_frame.pack(fill=X, expand=False) 
-settings_canvas = tk.Canvas(settings_scroll_canvas_frame, borderwidth=0, height=300) 
+settings_canvas = tk.Canvas(settings_scroll_canvas_frame, borderwidth=0, height=320) # Adjusted height slightly
 settings_scrollbar = ttk.Scrollbar(settings_scroll_canvas_frame, orient="vertical", command=settings_canvas.yview)
 scrollable_settings_content_frame = ttk.Frame(settings_canvas) 
 scrollable_settings_content_frame.bind("<Configure>", lambda e: settings_canvas.configure(scrollregion=settings_canvas.bbox("all")))
