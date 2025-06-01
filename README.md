@@ -1,7 +1,7 @@
 # GC-Text-Extractor (work in progress)
 Extract text from non binary files with sliders and preview. Drag and drop.
 
-![GC Text Extractor Interface](https://raw.githubusercontent.com/greg-cc/GC-Text-Extractor/refs/heads/main/GC%20text%20extractor.png)
+![GC Text Extractor Interface](https://raw.githubusercontent.com/greg-cc/GC-Text-Extractor/GC%20text%20extractor.png)
 
 The **GC Text Extractor** efficiently extracts meaningful text from your documents (`.txt`, `.docx`, `.pdf`, `.epub` or any non binary file) by intelligently filtering out unwanted content like code, stray symbols, or irrelevant short lines. Its unified, single-window interface provides comprehensive control over the cleaning process.
 
