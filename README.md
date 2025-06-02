@@ -3,7 +3,6 @@
 # GC-Text-Extractor
 Advanced tool to extract and refine text from various file types using a highly configurable filtering pipeline. Features a unified UI with a test pad, drag &amp; drop, and persistent settings.
 
-# ![GC Text Extractor Interface](https://raw.githubusercontent.com/greg-cc/GC-Text-Extractor/refs/heads/main/GC%20text%20extractor.png)
 ![GC Text Extractor Interface](https://github.com/greg-cc/GC-Text-Extractor/blob/7f7c3e2787c217ffe94eb142275e2a2768302e02/GC%20text%20extractor.png)
 
 The **GC Text Extractor** is a powerful desktop application designed to help you extract meaningful text from documents (`.txt`, `.docx`, `.pdf`, and user-defined types). It provides a comprehensive suite of filters to clean and refine the extracted content, removing noise like code, HTML tags, overly symbolic lines, or number-heavy sequences. All settings are highly configurable through a single-window interface and are saved between sessions.
