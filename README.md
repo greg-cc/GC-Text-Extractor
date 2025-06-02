@@ -1,95 +1,138 @@
-# GC-Text-Extractor 
-Extract text from non binary files with sliders and preview. Drag and drop.
 
+
+# GC-Text-Extractor
+Advanced tool to extract and refine text from various file types using a highly configurable filtering pipeline. Features a unified UI with a test pad, drag &amp; drop, and persistent settings.
+
+# ![GC Text Extractor Interface](https://raw.githubusercontent.com/greg-cc/GC-Text-Extractor/refs/heads/main/GC%20text%20extractor.png)
 ![GC Text Extractor Interface](https://github.com/greg-cc/GC-Text-Extractor/blob/7f7c3e2787c217ffe94eb142275e2a2768302e02/GC%20text%20extractor.png)
 
+The **GC Text Extractor** is a powerful desktop application designed to help you extract meaningful text from documents (`.txt`, `.docx`, `.pdf`, and user-defined types). It provides a comprehensive suite of filters to clean and refine the extracted content, removing noise like code, HTML tags, overly symbolic lines, or number-heavy sequences. All settings are highly configurable through a single-window interface and are saved between sessions.
 
-The **GC Text Extractor** efficiently extracts meaningful text from your documents (`.txt`, `.docx`, `.pdf`, `.epub` or any non binary file) by intelligently filtering out unwanted content like code, stray symbols, or irrelevant short lines. Its unified, single-window interface provides comprehensive control over the cleaning process.
+## Key Features
 
-## Key Areas & Usage
+**1. Robust File Handling:**
 
-**1. Filter Settings (Scrollable Top Section):**
-Fine-tune your extraction. All your settings are automatically saved and reloaded between sessions.
+  * **Multi-Format Extraction:** Natively processes `.txt`, `.docx` (Microsoft Word), and `.pdf` files.
+  * **Customizable Extension Processing:**
+      * **Process ONLY these extensions:** Specify a list of extensions (e.g., `.log, .md`) that (along with `.docx`/`.pdf`) will be exclusively processed (as text if not DOCX/PDF).
+      * **Always IGNORE these extensions:** Define a list of extensions (e.g., `.exe, .zip, .jpg`) to always skip.
+      * **File Processing Mode (if "Process ONLY" is empty):**
+          * *Specified Extensions Only:* Processes `.txt` and "Additional Text Exts".
+          * *Attempt All Dropped Files:* Tries to process any dropped file as plain text if its type is unknown (after checking ignore/include lists and special types).
+      * **Additional Text Exts:** A fallback list of custom extensions to treat as plain text when in "Specified Extensions Only" mode and the "Process ONLY" list is empty.
+  * **Drag & Drop:** Easily process files by dragging them onto the application.
+  * **Customizable Output:**
+      * Define a custom suffix for output filenames (e.g., `_cleaned`). Output is always `.txt`.
+      * Default suffix (`_processed`) is used if the custom field is empty to prevent accidental overwrites.
 
-**2. Filter Test Pad (Resizable Middle Section):**
-Instantly see affect on your sample text.
+**2. Unified User Interface:**
 
-**3. Process Files (Bottom Section):**
-Simply drag and drop. Saves the cleaned text to a new file in the same directory as the original + 'txtextract123.txt`.
+  * **Single-Window Design:** All controls, the test pad, and file processing area are visible and accessible without switching tabs or opening multiple dialogs.
+  * **Scrollable Filter Settings:** A comprehensive 4-column layout for filter settings, scrollable vertically to accommodate all options.
+  * **Filter Test Pad:**
+      * Resizable input and output text areas.
+      * "Process Pasted Text" button to instantly test current filter configurations on sample text.
+  * **Status Bar:** Provides feedback on operations, errors, and the application version.
 
-#   - Enabled filters are applied sequentially
-## Basic Filters
+**3. Comprehensive & Configurable Filtering Pipeline:**
 
-* **Min Words (General Seq):** Define the minimum number of words a general, non-punctuated sequence of text must have to be kept.
-* **Min Words (Punctuated Sent.):** Set a specific minimum word count for text segments that end with sentence punctuation (like '.', '!', '?').
-* **Alphanumeric Filter:** A toggle (**ON/OFF** via a small slider) to enable a filter that checks the ratio of letters and numbers in a text segment.
-* **Alphanumeric Threshold (if ON):** If the Alphanumeric Filter is **ON**, this slider and entry box let you set the minimum required ratio (0.0 to 1.0) of alphanumeric characters. Segments below this ratio are discarded. This is a powerful first line of defense against code or very noisy text.
-
-## Advanced Word/Block Filters
-
-Each of these has a main toggle (checkbox) and then specific sensitivity controls that become active when the filter is enabled.
-
-### Attempt to remove code-like blocks
-When **ON** (checked), this filter tries to identify and completely remove segments that resemble computer code rather than natural language.
-* **Sensitivity:** You can control the minimum number of programming keywords, code symbols, and words in a segment to check, as well as the symbol density threshold.
-
-### Concatenated Word Filter
-This targets very long "words" that look like multiple words joined without spaces (e.g., `LongCamelCaseString`).
-* **Behavior Toggle:** `[ ] Remove long concatenated words entirely (don't abbreviate)`
-    * If **OFF** (unchecked), such words are abbreviated (e.g., `Long...String`).
-    * If **ON** (checked), they are completely removed.
-* **Sensitivity:** Controls for "Min Length to Check" (how long a token must be) and "Min Sub-Words to Act" (how many internal "words" it must split into).
-
-### Symbol-Enclosed Word Filter
-This removes words surrounded by symbols (e.g., `*important*`, `_variable_`).
-* **Main Toggle:** `[ ] Remove words enclosed by symbols`
-* **Sensitivity:** The "Max Symbols Around" setting defines how many symbols on each side of a word the filter will consider for removal along with the word.
-
-#    - Custom Regex Filter:
-            - Allows users to input a custom regular expression.
-            - Modes: "Remove segments matching regex" or "Keep only segments matching regex".
-            - Toggle for case-sensitive matching.
-            - Invalid regex patterns are flagged in the status bar.
+  * **Settings Persistence:** All filter configurations are automatically saved to `text_extractor_settings.json` and reloaded on startup.
+  * **Initial Text Segmentation:**
+      * Pre-processes text to isolate HTML tags by adding newlines around them.
+      * Splits text into segments based on paragraphs, then sentences, with a fallback to newlines for very long or unstructured segments.
+      * **Configurable:** "Max Chars for Seg (b4 newline split)" allows tuning this stage.
+  * **Basic Text Filters:**
+      * **Min Words (General Sequence):** Minimum word count for general text lines.
+      * **Min Words (Punctuated Sentences):** Minimum word count for punctuated lines.
+      * **Alphanumeric Filter (Toggle & Sensitivity):**
+          * Filters segments based on the ratio of alphanumeric characters.
+          * *Sensitivity:* Ratio Threshold, Min Segment Length for Ratio Test, and Absolute Alphanumeric Fallback Count.
+  * **Advanced Word/Block Filters (Each with Enable/Disable Toggle & Sensitivity):**
+      * **Attempt to remove code-like blocks:**
+          * Identifies and removes segments resembling computer code or markup (HTML, JS, CSS).
+          * *Sensitivity:* Min keywords (includes common web tags), min code symbols, min words in segment, symbol density threshold.
+      * **"Too Many Numbers" Filter:**
+          * Removes segments overloaded with digits (e.g., long timestamps, numerical data lines).
+          * *Sensitivity:* Digit ratio threshold, min digits for ratio check, max allowed consecutive digits, and min words to exempt a segment.
+      * **Concatenated Word Filter:**
+          * Targets long tokens that appear to be multiple words joined without spaces (e.g., `CamelCaseStrings`).
+          * *Behavior Toggle:* Option to remove tokens entirely or abbreviate them (e.g., `First...Last`).
+          * *Sensitivity:* Min token length to check, min internal sub-words to trigger.
+      * **Symbol-Enclosed Word Filter:**
+          * Removes words surrounded by non-alphanumeric symbols (e.g., `*word*`, `_text_`).
+          * *Sensitivity:* Max number of symbols around the word to consider.
+      * **Custom Regex Filter:**
+          * Allows user-defined regular expressions for highly specific filtering.
+          * *Modes:* "Remove segments matching regex" (surgically removes only matched parts from segments) or "Keep only segments matching regex" (keeps entire segment if a match is found).
+          * *Toggle:* Case-sensitive matching.
+  * **URL Extraction (Optional):**
+      * A checkbox in settings to enable/disable.
+      * If enabled, extracts all URLs from the **original raw text** of the document.
+      * Deduplicates, sorts (case-insensitively), and appends the list of unique URLs to the end of the filtered text output under a "--- Detected URLs ---" heading.
 
 ## Installation
 
 1.  **Prerequisites:**
 
-      * Ensure you have Python 3 installed on your system (preferably Python 3.7 or newer). You can download it from [python.org](https://www.python.org/).
-      * `pip` (Python's package installer) is usually included with your Python installation.
+      * Python 3 (preferably 3.7 or newer) from [python.org](https://www.python.org/).
+      * `pip` (Python's package installer), usually included with Python.
 
-2.  **Download or Clone the Script:**
+2.  **Download or Clone:**
 
-      * Download the main Python script file (e.g., `text_stripper.py`) from this repository.
-      * Or, if you have Git installed, you can clone the repository:
+      * Download the main script file (e.g., `text_stripper.py`) from this repository.
+      * Or, clone with Git:
         ```bash
-        git clone <your_repository_url_here>
-        cd GC-Text-Extractor 
+        git clone [https://github.com/greg-cc/GC-Text-Extractor.git](https://github.com/greg-cc/GC-Text-Extractor.git)
+        cd GC-Text-Extractor
         ```
-        (Replace `<your_repository_url_here>` with the actual URL of your GitHub repository).
 
 3.  **Install Dependencies:**
-    Open your terminal or command prompt and run the following command to install the necessary Python libraries:
+    Open your terminal or command prompt and run:
 
     ```bash
     pip install tkinterdnd2 python-docx PyPDF2
     ```
 
-    *(Note: Depending on your Python setup, you might need to use `pip3` instead of `pip` if `pip` defaults to an older Python version).*
+    *(Note: You might need to use `pip3` on some systems).*
 
 4.  **Run the Application:**
-    Once the dependencies are installed, navigate to the directory where you saved the script (e.g., `text_stripper.py`) and run it from your terminal or command prompt:
+    Navigate to the script's directory and execute:
 
     ```bash
     python text_stripper.py
     ```
 
-    *(Similarly, you might need to use `python3` instead of `python` on some systems, particularly macOS and Linux).*
+    *(Or `python3 text_stripper.py` on some systems).*
+
+## How to Use
+
+1.  **Launch the Application:** Run `text_stripper.py`.
+2.  **Configure Filters (Top Section):**
+      * The settings panel is scrollable and organized into four columns.
+      * Adjust basic settings (word counts, alphanumeric criteria) in the first column.
+      * Set file handling preferences (extensions to include/ignore, processing mode, output suffix, URL extraction) in the second column.
+      * Enable/disable advanced filters using the toggles in the second column.
+      * Fine-tune the sensitivity of enabled advanced filters using the sliders and input boxes in the third and fourth columns.
+      * Settings are saved automatically when you close the application.
+3.  **Test Filters (Middle Section - Test Pad):**
+      * Paste any sample text into the left input area.
+      * Click "Process Pasted Text".
+      * The output, reflecting your current filter settings, will appear in the right area. This is great for quick tuning.
+4.  **Process Files (Bottom Section):**
+      * Drag and drop your `.txt`, `.docx`, `.pdf`, or other configured file types onto the designated area.
+      * The script will process them according to your settings.
+      * Output files (always `.txt`) will be saved in the same directory as the originals, with your chosen suffix (default `_processed`).
+5.  **Check Status Bar:** For feedback, error messages, and version info.
 
 ## Common Uses
 
-  * Cleaning text from OCR or web scrapes.
-  * Extracting core content by removing code, boilerplate, or UI elements.
-  * Preparing text for data analysis or import into other systems.
+  * Cleaning text from OCR or web scrapes by removing HTML/code and noise.
+  * Extracting core textual content from mixed-content documents.
+  * Preparing datasets for Natural Language Processing (NLP) tasks.
+  * Standardizing text extracted from various sources.
 
-GC Text Extractor gives you powerful, direct control to refine and extract precisely the text you need.
+GC Text Extractor offers a highly adaptable environment to refine and extract precisely the text you need from your documents.
+
+-----
+
+*License: (You should add your chosen open-source license here, e.g., MIT, Apache 2.0. If you haven't chosen one, consider adding one\!)*
