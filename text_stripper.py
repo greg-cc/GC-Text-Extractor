@@ -197,9 +197,7 @@ DEFAULT_ALPHANUM_ENABLED = 1; DEFAULT_ALPHANUM_THRESHOLD = 0.75
 DEFAULT_ALPHANUM_MIN_LEN_FOR_RATIO = 5; DEFAULT_ALPHANUM_ABS_COUNT_FALLBACK = 15
 DEFAULT_MAX_SEGMENT_LEN_BEFORE_NEWLINE_SPLIT = 350
 DEFAULT_PARA_FILTER_ENABLED = 0; DEFAULT_PARA_MIN_SENTENCES = 2; DEFAULT_PARA_MIN_WORDS = 20; DEFAULT_PARA_MIN_AVG_LEN = 5; DEFAULT_PARA_MAX_AVG_LEN = 40
-DEFAULT_REMOVE_CODE_BLOCKS = 1; DEFAULT_MIN_CODE_KEYWORDS = 1; DEFAULT_MIN_CODE_SYMBOLS = 2; DEFAULT_MIN_WORDS_CODE_CHECK = 2; DEFAULT_CODE_SYMBOL_DENSITY 
-
-= 0.20
+DEFAULT_REMOVE_CODE_BLOCKS = 1; DEFAULT_MIN_CODE_KEYWORDS = 1; DEFAULT_MIN_CODE_SYMBOLS = 2; DEFAULT_MIN_WORDS_CODE_CHECK = 2; DEFAULT_CODE_SYMBOL_DENSITY = 0.20
 DEFAULT_REMOVE_CONCAT_ENTIRELY = 1; DEFAULT_MIN_LEN_CONCAT_CHECK = 18; DEFAULT_MIN_SUB_WORDS_REPLACE = 3
 DEFAULT_REMOVE_SYMBOL_ENCLOSED = 1; DEFAULT_MAX_SYMBOLS_AROUND = 3
 DEFAULT_CUSTOM_REGEX_ENABLED = 0; DEFAULT_CUSTOM_REGEX_PATTERN = ""; DEFAULT_CUSTOM_REGEX_MODE = "remove_matches"; DEFAULT_CUSTOM_REGEX_CASE_SENSITIVE = 0
@@ -208,12 +206,8 @@ DEFAULT_OUTPUT_FILE_SUFFIX = "_processed"
 DEFAULT_EXTRACT_URLS_ENABLED = 0
 DEFAULT_FILE_PROCESSING_MODE = "specified"
 DEFAULT_INCLUDE_EXTENSIONS = ""
-DEFAULT_IGNORE_EXTENSIONS = ".zip, .rar, .7z, .exe, .dll, .msi, .pkg, .dmg, .iso, .img, .jpg, .jpeg, .png, .gif, .bmp, .tiff, .webp, .mp3, .wav, .aac, 
-
-.ogg, .mp4, .mov, .avi, .mkv, .webm"
-DEFAULT_REMOVE_NUMBER_HEAVY = 0; DEFAULT_NUMBER_RATIO_THRESHOLD = 0.5; DEFAULT_MIN_DIGITS_FOR_RATIO_CHECK = 5; DEFAULT_MAX_CONSECUTIVE_DIGITS = 8; 
-
-DEFAULT_MIN_WORDS_TO_EXEMPT_DIGITS = 10
+DEFAULT_IGNORE_EXTENSIONS = ".zip, .rar, .7z, .exe, .dll, .msi, .pkg, .dmg, .iso, .img, .jpg, .jpeg, .png, .gif, .bmp, .tiff, .webp, .mp3, .wav, .aac, .ogg, .mp4, .mov, .avi, .mkv, .webm"
+DEFAULT_REMOVE_NUMBER_HEAVY = 0; DEFAULT_NUMBER_RATIO_THRESHOLD = 0.5; DEFAULT_MIN_DIGITS_FOR_RATIO_CHECK = 5; DEFAULT_MAX_CONSECUTIVE_DIGITS = 8; DEFAULT_MIN_WORDS_TO_EXEMPT_DIGITS = 10
 DEFAULT_CODE_SYMBOL_MODE = "all"; DEFAULT_CODE_CUSTOM_SYMBOLS = ""
 DEFAULT_HTML_STRIPPING_MODE = "strip_tags"
 DEFAULT_CONSOLIDATE_OUTPUT = 0
@@ -404,10 +398,8 @@ def populate_settings_content(parent_scrollable_frame):
     Radiobutton(html_frame, text="Discard Segments w/ Tags", variable=html_stripping_mode_var, value="discard_segments").pack(side=TOP, anchor=W, padx=10)
 
     create_synchronized_setting(col1_frame, "Min Words (General Seq):", min_words_general_var, 1, 100, is_int=True, label_width=24, control_length=90)
-    create_synchronized_setting(col1_frame, "Min Words (Punctuated Sent.):", min_words_sentence_var, 1, 50, is_int=True, label_width=24,
-control_length=90)
-    create_synchronized_setting(col1_frame, "Max Chars Seg (for NL split):", max_segment_len_var, 50, 2000, resolution=50, is_int=True, label_width=24,
-control_length=90)
+    create_synchronized_setting(col1_frame, "Min Words (Punctuated Sent.):", min_words_sentence_var, 1, 50, is_int=True, label_width=24, control_length=90)
+    create_synchronized_setting(col1_frame, "Max Chars Seg (for NL split):", max_segment_len_var, 50, 2000, resolution=50, is_int=True, label_width=24, control_length=90)
 
     # --- Column 2: Alphanum, Number & Paragraph Filters ---
     Label(col2_frame, text="Content Structure Filters:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
@@ -417,27 +409,20 @@ control_length=90)
     def update_alphanum_status_and_toggle(*args): toggle_controls_state(alphanum_filter_enabled_var, alnum_sensitivity_controls)
     alphanum_filter_enabled_var.trace_add("write", update_alphanum_status_and_toggle)
     Checkbutton(alphanum_main_frame, text="Enable", variable=alphanum_filter_enabled_var).pack(side=LEFT, anchor=W)
-    ratio_widgets = create_synchronized_setting(col2_frame, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, resolution=0.01, is_int=False,
-label_width=22, indent=10, control_length=90)
+    ratio_widgets = create_synchronized_setting(col2_frame, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, resolution=0.01, is_int=False, label_width=22, indent=10, control_length=90)
     alnum_sensitivity_controls.extend(ratio_widgets)
-    alnum_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Seg Len for Ratio Test:", alnum_min_len_for_ratio_var, 1, 50,
-is_int=True, label_width=22, indent=10, control_length=90))
-    alnum_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Abs Alnum Fallback Count:", alnum_abs_count_fallback_var, 0, 100,
-is_int=True, label_width=22, indent=10, control_length=90))
+    alnum_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Seg Len for Ratio Test:", alnum_min_len_for_ratio_var, 1, 50, is_int=True, label_width=22, indent=10, control_length=90))
+    alnum_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Abs Alnum Fallback Count:", alnum_abs_count_fallback_var, 0, 100, is_int=True, label_width=22, indent=10, control_length=90))
     update_alphanum_status_and_toggle()
 
     Label(col2_frame, text="Number-Heavy Filter:", font=('Helvetica', 9, 'bold')).pack(side=TOP, pady=(10,0), anchor=NW, padx=5)
     cb_remove_number_heavy = Checkbutton(col2_frame, text="Enable", variable=remove_number_heavy_var)
     cb_remove_number_heavy.pack(side=TOP, anchor=W, padx=15)
     temp_number_controls = []
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Digit Ratio Threshold >", number_ratio_threshold_var, 0.01, 1.0, resolution=0.01,
-is_int=False, label_width=22, indent=10, control_length=90))
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Min Digits for Ratio Chk:", min_digits_for_ratio_check_var, 1, 50, is_int=True,
-label_width=22, indent=10, control_length=90))
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Max Consecutive Digits:", max_consecutive_digits_var, 3, 50, is_int=True,
-label_width=22, indent=10, control_length=90))
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Min Words to Exempt:", min_words_to_exempt_digits_var, 0, 50, is_int=True,
-label_width=22, indent=10, control_length=90))
+    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Digit Ratio Threshold >", number_ratio_threshold_var, 0.01, 1.0, resolution=0.01, is_int=False, label_width=22, indent=10, control_length=90))
+    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Min Digits for Ratio Chk:", min_digits_for_ratio_check_var, 1, 50, is_int=True, label_width=22, indent=10, control_length=90))
+    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Max Consecutive Digits:", max_consecutive_digits_var, 3, 50, is_int=True, label_width=22, indent=10, control_length=90))
+    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Min Words to Exempt:", min_words_to_exempt_digits_var, 0, 50, is_int=True, label_width=22, indent=10, control_length=90))
     remove_number_heavy_var.trace_add("write", lambda *args: toggle_controls_state(remove_number_heavy_var, temp_number_controls))
     toggle_controls_state(remove_number_heavy_var, temp_number_controls)
 
@@ -445,14 +430,10 @@ label_width=22, indent=10, control_length=90))
     cb_para_filter = Checkbutton(col2_frame, text="Enable", variable=para_filter_enabled_var)
     cb_para_filter.pack(side=TOP, anchor=W, padx=15)
     para_sensitivity_controls = []
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Sentences / Para:", para_min_sentences_var, 1, 20, is_int=True,
-label_width=22, indent=10, control_length=90))
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Words / Para:", para_min_words_var, 1, 200, resolution=5, is_int=True,
-label_width=22, indent=10, control_length=90))
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Avg Sent. Len:", para_min_avg_len_var, 1, 50, is_int=True,
-label_width=22, indent=10, control_length=90))
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Max Avg Sent. Len:", para_max_avg_len_var, 5, 100, is_int=True,
-label_width=22, indent=10, control_length=90))
+    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Sentences / Para:", para_min_sentences_var, 1, 20, is_int=True, label_width=22, indent=10, control_length=90))
+    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Words / Para:", para_min_words_var, 1, 200, resolution=5, is_int=True, label_width=22, indent=10, control_length=90))
+    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Avg Sent. Len:", para_min_avg_len_var, 1, 50, is_int=True, label_width=22, indent=10, control_length=90))
+    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Max Avg Sent. Len:", para_max_avg_len_var, 5, 100, is_int=True, label_width=22, indent=10, control_length=90))
     para_filter_enabled_var.trace_add("write", lambda *args: toggle_controls_state(para_filter_enabled_var, para_sensitivity_controls))
     toggle_controls_state(para_filter_enabled_var, para_sensitivity_controls)
 
@@ -472,9 +453,7 @@ label_width=22, indent=10, control_length=90))
     create_synchronized_setting(col3_frame, "Pages to Process (0=all):", pages_to_process_var, 0, 500, is_int=True, label_width=22, control_length=80)
     
     # NEW UI ELEMENT FOR TIMEOUT
-    create_synchronized_setting(col3_frame, "File Processing Timeout (secs):", file_processing_timeout_var, 1, 300, is_int=True, label_width=22, 
-
-control_length=80)
+    create_synchronized_setting(col3_frame, "File Processing Timeout (secs):", file_processing_timeout_var, 1, 300, is_int=True, label_width=22, control_length=80)
 
 
     # Updated URL extraction label
@@ -488,9 +467,7 @@ control_length=80)
     consolidation_controls = []
     cb_consolidate = Checkbutton(col3_frame, text="Enable Consolidation", variable=consolidate_output_enabled_var)
     cb_consolidate.pack(side=TOP, anchor=W, padx=15)
-    consolidation_controls.append(create_entry_setting(col3_frame, "Consolidated Filename:", consolidated_output_filename_var, entry_width=20, 
-
-label_width=22, indent=10))
+    consolidation_controls.append(create_entry_setting(col3_frame, "Consolidated Filename:", consolidated_output_filename_var, entry_width=20, label_width=22, indent=10))
 
     def update_consolidation_controls(*args):
         toggle_controls_state(consolidate_output_enabled_var, consolidation_controls)
@@ -509,30 +486,22 @@ label_width=22, indent=10))
     cb_custom_regex.pack(side=TOP, anchor=W, padx=5, pady=(0,10))
     concat_sensitivity_label = Label(col4_frame, text="Concatenated Word Def.:", font=('Helvetica', 9, 'italic'))
     concat_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
-    create_synchronized_setting(col4_frame, "Min Length to Check:", min_len_concat_check_var, 10, 50, is_int=True, label_width=20, control_length=80,
-indent=10)
-    create_synchronized_setting(col4_frame, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10, is_int=True, label_width=20, control_length=80,
-indent=10)
+    create_synchronized_setting(col4_frame, "Min Length to Check:", min_len_concat_check_var, 10, 50, is_int=True, label_width=20, control_length=80, indent=10)
+    create_synchronized_setting(col4_frame, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10, is_int=True, label_width=20, control_length=80, indent=10)
     symbol_sensitivity_label = Label(col4_frame, text="Symbol-Enclosed Sens.:", font=('Helvetica', 9, 'italic'))
     symbol_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5); temp_symbol_controls = []
-    temp_symbol_controls.extend(create_synchronized_setting(col4_frame, "Max Symbols Around:", max_symbols_around_var, 1, 5, is_int=True, label_width=20,
-control_length=80, indent=10))
-    remove_symbol_enclosed_var.trace_add("write", lambda *args: toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls +
-[symbol_sensitivity_label]))
+    temp_symbol_controls.extend(create_synchronized_setting(col4_frame, "Max Symbols Around:", max_symbols_around_var, 1, 5, is_int=True, label_width=20, control_length=80, indent=10))
+    remove_symbol_enclosed_var.trace_add("write", lambda *args: toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label]))
     toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label])
 
     # --- Column 5: Code Filter & Custom Regex Details ---
     Label(col5_frame, text="Code & Regex Details:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
     code_sensitivity_label = Label(col5_frame, text="Code Filter Sensitivity:", font=('Helvetica', 9, 'italic'))
     code_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5); temp_code_controls = []
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Keywords:", min_code_keywords_var, 0, 20, is_int=True, label_width=20,
-control_length=80, indent=10))
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Code Symbols:", min_code_symbols_var, 0, 30, is_int=True, label_width=20,
-control_length=80, indent=10))
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Words in Seg:", min_words_code_check_var, 1, 20, is_int=True, label_width=20,
-control_length=80, indent=10))
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Symbol Density >", code_symbol_density_var, 0.01, 0.5, resolution=0.01,
-is_int=False, label_width=20, control_length=80, indent=10))
+    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Keywords:", min_code_keywords_var, 0, 20, is_int=True, label_width=20, control_length=80, indent=10))
+    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Code Symbols:", min_code_symbols_var, 0, 30, is_int=True, label_width=20, control_length=80, indent=10))
+    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Words in Seg:", min_words_code_check_var, 1, 20, is_int=True, label_width=20, control_length=80, indent=10))
+    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Symbol Density >", code_symbol_density_var, 0.01, 0.5, resolution=0.01, is_int=False, label_width=20, control_length=80, indent=10))
     code_symbol_mode_frame = Frame(col5_frame); code_symbol_mode_frame.pack(side=TOP, fill=X, padx=(15, 5))
     Label(code_symbol_mode_frame, text="Symbol Mode:").pack(side=TOP, anchor=W)
     Radiobutton(code_symbol_mode_frame, text="All Pre-def", variable=code_symbol_mode_var, value="all").pack(side=LEFT, padx=1)
@@ -554,8 +523,7 @@ is_int=False, label_width=20, control_length=80, indent=10))
     rb_keep.pack(side=LEFT, padx=1); temp_regex_controls.append(rb_keep)
     cb_case_sensitive = Checkbutton(regex_mode_frame_col5, text="Case Sens.", variable=custom_regex_case_sensitive_var)
     cb_case_sensitive.pack(side=LEFT, padx=2); temp_regex_controls.append(cb_case_sensitive)
-    custom_regex_enabled_var.trace_add("write", lambda *args: toggle_controls_state(custom_regex_enabled_var, temp_regex_controls +
-[regex_sensitivity_label]))
+    custom_regex_enabled_var.trace_add("write", lambda *args: toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label]))
     toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label])
 
 # --- New function to consolidate files ---
@@ -599,6 +567,9 @@ def _process_file_in_process(filepath, params, result_queue):
     A separate function to run file processing in a dedicated process.
     It puts a tuple of (status, data) into a queue for the main process.
     """
+    # --- TROUBLESHOOTING START POINT 1: ENTRY AND FILE TYPE
+    print(f"DEBUG: Starting worker process for: {filepath}")
+    
     # Moved helper functions inside this function to ensure they are available to the new process
     def extract_text_from_txt(filepath):
         try:
@@ -625,8 +596,12 @@ def _process_file_in_process(filepath, params, result_queue):
                         # print(f"PDF Decryption failed for {filepath}")
                         # status_label.config(text=f"PDF Decryption Failed: {os.path.basename(filepath)}")
                         return ""
-                
+                    
                 num_pages = len(reader.pages)
+                
+                # --- TROUBLESHOOTING START POINT 2: PAGE COUNT
+                print(f"DEBUG: {os.path.basename(filepath)} has {num_pages} pages. Processing up to {pages_to_process if pages_to_process > 0 and pages_to_process < num_pages else num_pages} pages.")
+                
                 if pages_to_process > 0 and pages_to_process < num_pages:
                     page_limit = pages_to_process
                     # print(f"INFO: Processing first {page_limit} pages of {os.path.basename(filepath)}.")
@@ -635,11 +610,14 @@ def _process_file_in_process(filepath, params, result_queue):
                     # print(f"INFO: Processing all {num_pages} pages of {os.path.basename(filepath)}.")
                     
                 for i in range(page_limit):
+                    # --- TROUBLESHOOTING START POINT 3: PAGE-BY-PAGE PROGRESS
+                    print(f"DEBUG: Attempting to extract page {i+1}...")
                     page_text = reader.pages[i].extract_text()
                     text += (page_text + "\n") if page_text else ""
         except Exception as e:
             # print(f"Error reading .pdf {filepath}: {e}")
             # status_label.config(text=f"Error reading .pdf: {os.path.basename(filepath)}")
+            print(f"ERROR: Exception in extract_text_from_pdf: {e}")
             return ""
         return text
     def get_alphanumeric_ratio(text_segment):
@@ -743,8 +721,8 @@ def _process_file_in_process(filepath, params, result_queue):
             if not para_text_stripped: continue
             if params['para_filter_enabled_var']:
                 if not is_valid_paragraph(para_text_stripped,
-                                          params['para_min_sentences_var'], params['para_min_words_var'],
-                                          params['para_min_avg_len_var'], params['para_max_avg_len_var']):
+                                         params['para_min_sentences_var'], params['para_min_words_var'],
+                                         params['para_min_avg_len_var'], params['para_max_avg_len_var']):
                     continue # Discard this entire paragraph
             sentence_candidates = re.split(r'(?<=[.!?])\s+(?=[A-Z"\'\(\[\d“‘\u2022\u2023\u25E6\u2043\u2219*+-])|(?<=[.!?])\s*$', para_text_stripped)
             for s_candidate in sentence_candidates:
@@ -779,9 +757,9 @@ def _process_file_in_process(filepath, params, result_queue):
             words_in_segment_original = current_segment_to_check.split(' ')
             if params['remove_code_blocks_var']:
                 if is_code_like_segment(current_segment_to_check, words_in_segment_original,
-                                        params['min_code_keywords_var'], params['min_code_symbols_var'],
-                                        params['min_words_code_check_var'], params['code_symbol_density_var'],
-                                        params['code_symbol_mode_var'], params['code_custom_symbols_var']):
+                                         params['min_code_keywords_var'], params['min_code_symbols_var'],
+                                         params['min_words_code_check_var'], params['code_symbol_density_var'],
+                                         params['code_symbol_mode_var'], params['code_custom_symbols_var']):
                     continue
             if params['remove_number_heavy_var']:
                 if is_number_heavy_segment(current_segment_to_check, words_in_segment_original,
@@ -819,7 +797,7 @@ def _process_file_in_process(filepath, params, result_queue):
                 modified_segment = re.sub(symbol_pattern, '', modified_segment)
                 modified_segment = ' '.join(modified_segment.split())
             if modified_segment.strip(): final_segments_before_regex.append(modified_segment)
-        
+    
         if params['custom_regex_enabled_var'] and compiled_regex:
             output_after_regex = []
             for segment in final_segments_before_regex:
@@ -836,9 +814,7 @@ def _process_file_in_process(filepath, params, result_queue):
     def extract_and_format_urls(text_content):
         if not text_content: return "", []
         # This pattern now better handles trailing punctuation and includes common TLDs
-        url_pattern = re.compile(r'(?:(?:https?|ftp):\/\/|www\.)(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,12}|localhost|\d{1,3}\.
-
-\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?(?:[/?#][^\s"<>()\[\]]*|\b)', re.IGNORECASE)
+        url_pattern = re.compile(r'(?:(?:https?|ftp):\/\/|www\.)(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,12}|localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?(?:[/?#][^\s"<>()\[\]]*|\b)', re.IGNORECASE)
         found_urls_raw = []
         for match in url_pattern.finditer(text_content):
             url = match.group(0)
@@ -874,6 +850,10 @@ def _process_file_in_process(filepath, params, result_queue):
     try:
         filename_base, extension_raw = os.path.splitext(filepath)
         extension = extension_raw.lower()
+        
+        # --- TROUBLESHOOTING START POINT 4: CONFIRMING EXTENSION
+        print(f"DEBUG: Identified file extension as '{extension}'")
+        
         raw_full_text = ""
         
         pages_to_process = params['pages_to_process_var']
@@ -883,13 +863,9 @@ def _process_file_in_process(filepath, params, result_queue):
             raw_full_text = extract_text_from_docx(filepath)
         elif extension == '.pdf':
             raw_full_text = extract_text_from_pdf(filepath, pages_to_process)
-        elif extension == '.txt' or extension in {ext.strip().lower() for ext in params['custom_file_extensions_var'].split(',') if ext.strip
-
-().startswith('.')}:
+        elif extension == '.txt' or extension in {ext.strip().lower() for ext in params['custom_file_extensions_var'].split(',') if ext.strip().startswith('.')}:
             raw_full_text = extract_text_from_txt(filepath)
-        elif {ext.strip().lower() for ext in params['include_extensions_var'].split(',')} and extension in {ext.strip().lower() for ext in params
-
-['include_extensions_var'].split(',')}:
+        elif {ext.strip().lower() for ext in params['include_extensions_var'].split(',')} and extension in {ext.strip().lower() for ext in params['include_extensions_var'].split(',')}:
             raw_full_text = extract_text_from_txt(filepath)
         elif params['file_processing_mode_var'] == "all_files":
             raw_full_text = extract_text_from_txt(filepath)
@@ -1093,9 +1069,7 @@ if __name__ == "__main__":
     populate_settings_content(scrollable_settings_content_frame)
     test_pad_container_frame = Frame(root, relief=SUNKEN, borderwidth=1); test_pad_container_frame.pack(side=TOP, fill=BOTH, expand=True, padx=7, pady=7)
     populate_test_pad_ui(test_pad_container_frame)
-    file_processing_container_frame = Frame(root, relief=SUNKEN, borderwidth=1); file_processing_container_frame.pack(side=TOP, fill=X, padx=7, pady=
-
-(0,7))
+    file_processing_container_frame = Frame(root, relief=SUNKEN, borderwidth=1); file_processing_container_frame.pack(side=TOP, fill=X, padx=7, pady=(0,7))
     Label(file_processing_container_frame, text="Process Files", font=('Helvetica', 12, 'bold')).pack(anchor=W, padx=5, pady=(5,2))
     drop_target_label = Label(file_processing_container_frame,text="Supports any file - Drop here to process",bg="lightgrey",relief=SUNKEN,height=4)
     drop_target_label.pack(padx=10, pady=(0,10), fill=X, expand=False)
