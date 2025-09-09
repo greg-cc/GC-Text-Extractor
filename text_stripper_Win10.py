@@ -1,7 +1,6 @@
 import tkinter as tk
-from tkinter import ttk
-from tkinter import (Label, Frame, IntVar, BooleanVar, DoubleVar, Scale, Entry, Checkbutton, Spinbox, Button, Text, Scrollbar, PanedWindow, Radiobutton,
-                     SUNKEN, W, X, Y, BOTTOM, LEFT, TOP, BOTH, HORIZONTAL, RIGHT, NW, DISABLED, NORMAL, END, RAISED, VERTICAL, StringVar)
+import customtkinter as ctk
+from tkinter import (PanedWindow, SUNKEN, RAISED, VERTICAL, BOTH, X, Y, RIGHT, LEFT, TOP, BOTTOM, W, NW, END, DISABLED, NORMAL)
 import tkinter.filedialog as filedialog
 import os
 import re
@@ -14,19 +13,23 @@ import queue
 import threading
 from queue import Queue
 
+# The tkinterdnd2 library is compatible with customtkinter
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
-    print("INFO: tkinterdnd2 imported successfully.")
     DND_AVAILABLE = True
+    # Define a custom CTk class that inherits from the DND root
+    class CTkinterDnD(ctk.CTk, TkinterDnD.Tk):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.TkdndVersion = TkinterDnD._require(self)
 except ImportError:
     print("WARNING: tkinterdnd2 library not found. Drag and drop will be disabled.")
     DND_AVAILABLE = False
-    class TkinterDnD: # Mock class
-        @staticmethod
-        def Tk(): return tk.Tk()
+    class CTkinterDnD(ctk.CTk): pass # Fallback class
     DND_FILES = None
 
-APP_VERSION = "1.7.8" # Performance Fix for HTML Stripping
+
+APP_VERSION = "1.8.0" # Added Stop Button
 
 # --- Default values ---
 DEFAULT_PRE_FILTER_ENABLED = 1
@@ -143,6 +146,8 @@ SETTINGS_CONFIG = {
 g_test_pad_input_text = None; g_test_pad_output_text = None
 g_processed_files_list = []
 g_message_queue = Queue()
+g_stop_event = threading.Event() # <<< CHANGE 1: The global stop flag
+g_stop_button = None
 status_log = None
 root = None
 
@@ -174,72 +179,70 @@ def save_app_settings():
         print(f"INFO: Settings saved to {SETTINGS_FILENAME}")
     except Exception as e: print(f"ERROR: Failed to save settings: {e}")
 
-def create_entry_setting(parent, label_text, var, label_width=28, entry_width=30, indent=0, side_to_pack_label=LEFT, side_to_pack_entry=LEFT):
-    frame = Frame(parent, relief=tk.FLAT, borderwidth=0); frame.pack(side=TOP, fill=X, padx=5, pady=1)
-    Label(frame, text=label_text, width=label_width, anchor=W).pack(side=side_to_pack_label, padx=(indent,2))
-    entry = Entry(frame, textvariable=var, width=entry_width)
-    entry.pack(side=side_to_pack_entry, fill=X, expand=True, padx=2)
+def create_entry_setting(parent, label_text, var, label_width=28, entry_width=30, indent=0):
+    frame = ctk.CTkFrame(parent, fg_color="transparent")
+    frame.pack(side=TOP, fill=X, padx=5, pady=1)
+    label = ctk.CTkLabel(frame, text=label_text, width=label_width*6, anchor=W, text_color="black")
+    label.pack(side=LEFT, padx=(indent, 2))
+    entry = ctk.CTkEntry(frame, textvariable=var, fg_color="white", text_color="black", border_color="black")
+    entry.pack(side=LEFT, fill=X, expand=True, padx=2)
     return entry
-def create_synchronized_setting(parent, label_text, var, from_, to, resolution=None, is_int=True, label_width=28, control_length=130, indent=0):
-    frame = Frame(parent, relief=tk.FLAT, borderwidth=0); frame.pack(side=TOP, fill=X, padx=5, pady=1)
-    Label(frame, text=label_text, width=label_width, anchor=W).pack(side=LEFT, padx=(indent,2))
+
+def create_synchronized_setting(parent, label_text, var, from_, to, resolution=None, is_int=True, label_width=28, indent=0):
+    frame = ctk.CTkFrame(parent, fg_color="transparent")
+    frame.pack(side=TOP, fill=X, padx=5, pady=1)
+    ctk.CTkLabel(frame, text=label_text, width=label_width*6, anchor=W, text_color="black").pack(side=LEFT, padx=(indent, 2))
+    
     entry_var = tk.StringVar()
-    entry = Entry(frame, textvariable=entry_var, width=6); entry.pack(side=RIGHT, padx=(0,2))
-    scale = Scale(frame, variable=var, from_=from_, to=to, resolution=resolution if resolution else -1, orient=HORIZONTAL, length=control_length)
-    scale.pack(side=RIGHT, fill=X, expand=True, padx=(2,2))
+    entry = ctk.CTkEntry(frame, textvariable=entry_var, width=50, fg_color="white", text_color="black", border_color="black")
+    entry.pack(side=RIGHT, padx=(0, 2))
+    
+    slider = ctk.CTkSlider(frame, variable=var, from_=from_, to=to,
+                           fg_color="white", progress_color="black", button_color="black",
+                           button_hover_color="black")
+    if is_int:
+        slider.configure(number_of_steps=to - from_)
+    slider.pack(side=RIGHT, fill=X, expand=True, padx=(2, 2))
+
     def _update_entry_from_scale(*args):
-        try: val = var.get(); entry_var.set(str(int(val)) if is_int else f"{val:.2f}")
-        except tk.TclError: pass
+        try:
+            val = var.get()
+            entry_var.set(str(int(val)) if is_int else f"{val:.2f}")
+        except (tk.TclError, ValueError): pass
+
     def _update_scale_from_entry(*args):
         try:
-            val_str = entry_var.get();
+            val_str = entry_var.get()
             if not val_str: return
             new_val = int(val_str) if is_int else float(val_str)
             new_val = max(from_, min(to, new_val))
             if var.get() != new_val: var.set(new_val)
             current_var_val_for_entry = var.get()
             entry_var.set(str(int(current_var_val_for_entry)) if is_int else f"{current_var_val_for_entry:.2f}")
-        except ValueError: _update_entry_from_scale()
-        except tk.TclError: pass
-    var.trace_add("write", _update_entry_from_scale); entry_var.trace_add("write", _update_scale_from_entry)
+        except (ValueError, tk.TclError): _update_entry_from_scale()
+        
+    var.trace_add("write", _update_entry_from_scale)
+    entry_var.trace_add("write", _update_scale_from_entry)
     _update_entry_from_scale()
-    return [entry, scale]
-def toggle_controls_state(toggle_var, controls_list_of_widgets):
-    new_state = NORMAL if toggle_var.get() == 1 else DISABLED
-    for control_widget in controls_list_of_widgets:
-        if not (control_widget and hasattr(control_widget, 'configure')): continue
-        if isinstance(control_widget, tk.Label): continue
-        try:
-            control_widget.configure(state=new_state)
-        except tk.TclError as e:
-            if isinstance(control_widget, (tk.Frame, ttk.Frame)) and \
-                ("unknown option \"-state\"" in str(e).lower() or "invalid command name" in str(e).lower()):
-                for child in control_widget.winfo_children():
-                    if hasattr(child, 'configure') and not isinstance(child, tk.Label):
-                        try: child.configure(state=new_state)
-                        except tk.TclError: pass
-            else:
-                print(f"ERROR: TclError configuring widget {control_widget}: {e}")
+    return [entry, slider]
 
 def log_message(message, level='status'):
-    """Appends a message to the new status log Text widget."""
     global status_log, root
     if status_log is None or not status_log.winfo_exists():
-        print(f"LOG ({level}): {message}") # Fallback if GUI isn't ready
+        print(f"LOG ({level}): {message}")
         return
 
-    status_log.config(state=NORMAL)
+    status_log.configure(state=NORMAL)
     if level == 'error':
         status_log.insert(END, f"ERROR: {message}\n", "error")
     else:
         status_log.insert(END, f"{message}\n")
     
     status_log.see(END)
-    status_log.config(state=DISABLED)
+    status_log.configure(state=DISABLED)
     if root:
         root.update_idletasks()
 
-# --- CORE TEXT PROCESSING LOGIC (GLOBAL SCOPE) ---
 def get_alphanumeric_ratio(text_segment):
     if not text_segment: return 0.0
     alphanumeric_chars = sum(1 for char in text_segment if char.isalnum())
@@ -312,23 +315,17 @@ def is_valid_paragraph(para_text, min_sentences, min_words, min_avg_len, max_avg
 def process_text(full_text, params):
     if params.get('pre_filter_enabled_var', 1) == 0:
         return full_text
-
-    extracted_content = []
     if not full_text or not full_text.strip(): return ""
-    
     html_mode = params['html_stripping_mode_var']
     if html_mode == "strip_tags":
-        # Use a non-greedy pattern for performance
         processed_full_text = re.sub(r'<.*?>', ' ', full_text)
         processed_full_text = re.sub(r'\s+', ' ', processed_full_text).strip()
     elif html_mode == "discard_segments":
         lines = full_text.splitlines()
         processed_full_text = "\n".join([line for line in lines if not re.search(r'<[^>]+>', line)])
-    else: # Mode is "off"
+    else:
         processed_full_text = full_text
-    
     paragraphs = re.split(r'\n\s*\n+', processed_full_text.strip())
-    
     segments_for_filtering = []
     for para_text in paragraphs:
         para_text_stripped = para_text.strip()
@@ -352,7 +349,6 @@ def process_text(full_text, params):
                     if line.strip(): segments_for_filtering.append(line.strip())
             else:
                 segments_for_filtering.append(s_candidate_stripped)
-    
     if not segments_for_filtering and processed_full_text.strip():
         segments_for_filtering = [line.strip() for line in processed_full_text.splitlines() if line.strip()]
     compiled_regex = None
@@ -360,9 +356,7 @@ def process_text(full_text, params):
         try:
             flags = 0 if params['custom_regex_case_sensitive_var'] else re.IGNORECASE
             compiled_regex = re.compile(params['custom_regex_pattern_var'], flags)
-        except re.error:
-            pass
-
+        except re.error: pass
     final_segments_before_regex = []
     for segment_text in segments_for_filtering:
         current_segment_to_check = segment_text
@@ -409,7 +403,6 @@ def process_text(full_text, params):
             modified_segment = re.sub(symbol_pattern, '', modified_segment)
             modified_segment = ' '.join(modified_segment.split())
         if modified_segment.strip(): final_segments_before_regex.append(modified_segment)
-
     if params['custom_regex_enabled_var'] and compiled_regex:
         output_after_regex = []
         for segment in final_segments_before_regex:
@@ -423,199 +416,7 @@ def process_text(full_text, params):
         extracted_content = final_segments_before_regex
     return "\n\n".join(extracted_content)
 
-# --- GUI Construction ---
-def populate_settings_content(parent_scrollable_frame):
-    col_padding = (0,0,5,0); col_padx = (0,2)
-    column_container = ttk.Frame(parent_scrollable_frame, padding=(0,0,0,5)); column_container.pack(fill=BOTH, expand=True)
-    col1_frame = ttk.Frame(column_container, padding=col_padding); col1_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW, padx=col_padx)
-    col2_frame = ttk.Frame(column_container, padding=col_padding); col2_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW, padx=col_padx)
-    col3_frame = ttk.Frame(column_container, padding=col_padding); col3_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW, padx=col_padx)
-    col4_frame = ttk.Frame(column_container, padding=col_padding); col4_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW, padx=col_padx)
-    col5_frame = ttk.Frame(column_container); col5_frame.pack(side=LEFT, fill=Y, expand=True, anchor=NW, padx=col_padx)
 
-    # --- Column 1: Pre-Filter & Basic Segmentation ---
-    Label(col1_frame, text="Pre-Filter & Basic Segmentation:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-
-    pre_filter_controls = []
-    cb_pre_filter = Checkbutton(col1_frame, text="Enable Pre-Filter / Segmentation", variable=pre_filter_enabled_var)
-    cb_pre_filter.pack(side=TOP, anchor=W, padx=5, pady=(0, 5))
-    
-    html_frame = Frame(col1_frame, relief=tk.FLAT, borderwidth=0); html_frame.pack(side=TOP, fill=X, padx=5)
-    Label(html_frame, text="HTML Stripping Mode:", font=('Helvetica', 9, 'bold')).pack(side=TOP, anchor=W)
-    Radiobutton(html_frame, text="Off", variable=html_stripping_mode_var, value="off").pack(side=TOP, anchor=W, padx=10)
-    Radiobutton(html_frame, text="Strip Tags & Keep Content", variable=html_stripping_mode_var, value="strip_tags").pack(side=TOP, anchor=W, padx=10)
-    Radiobutton(html_frame, text="Discard Segments w/ Tags", variable=html_stripping_mode_var, value="discard_segments").pack(side=TOP, anchor=W, padx=10)
-    pre_filter_controls.append(html_frame)
-
-    pre_filter_controls.extend(create_synchronized_setting(col1_frame, "Min Words (General Seq):", min_words_general_var, 1, 100, is_int=True, label_width=24, control_length=90))
-    pre_filter_controls.extend(create_synchronized_setting(col1_frame, "Min Words (Punctuated Sent.):", min_words_sentence_var, 1, 50, is_int=True, label_width=24, control_length=90))
-    pre_filter_controls.extend(create_synchronized_setting(col1_frame, "Max Chars Seg (for NL split):", max_segment_len_var, 50, 2000, resolution=50, is_int=True, label_width=24, control_length=90))
-    pre_filter_enabled_var.trace_add("write", lambda *args: toggle_controls_state(pre_filter_enabled_var, pre_filter_controls))
-    toggle_controls_state(pre_filter_enabled_var, pre_filter_controls)
-
-    # --- Column 2: Alphanum, Number & Paragraph Filters ---
-    Label(col2_frame, text="Content Structure Filters:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-    Label(col2_frame, text="Alphanumeric Filter:", font=('Helvetica', 9, 'bold')).pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
-    alphanum_main_frame = Frame(col2_frame, relief=tk.FLAT, borderwidth=0); alphanum_main_frame.pack(side=TOP, fill=X, padx=5, pady=(0,0))
-    alnum_sensitivity_controls = []
-    def update_alphanum_status_and_toggle(*args): toggle_controls_state(alphanum_filter_enabled_var, alnum_sensitivity_controls)
-    alphanum_filter_enabled_var.trace_add("write", update_alphanum_status_and_toggle)
-    Checkbutton(alphanum_main_frame, text="Enable", variable=alphanum_filter_enabled_var).pack(side=LEFT, anchor=W)
-    ratio_widgets = create_synchronized_setting(col2_frame, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, resolution=0.01, is_int=False, label_width=22, indent=10, control_length=90)
-    alnum_sensitivity_controls.extend(ratio_widgets)
-    alnum_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Seg Len for Ratio Test:", alnum_min_len_for_ratio_var, 1, 50, is_int=True, label_width=22, indent=10, control_length=90))
-    alnum_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Abs Alnum Fallback Count:", alnum_abs_count_fallback_var, 0, 100, is_int=True, label_width=22, indent=10, control_length=90))
-    update_alphanum_status_and_toggle()
-
-    Label(col2_frame, text="Number-Heavy Filter:", font=('Helvetica', 9, 'bold')).pack(side=TOP, pady=(10,0), anchor=NW, padx=5)
-    cb_remove_number_heavy = Checkbutton(col2_frame, text="Enable", variable=remove_number_heavy_var)
-    cb_remove_number_heavy.pack(side=TOP, anchor=W, padx=15)
-    temp_number_controls = []
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Digit Ratio Threshold >", number_ratio_threshold_var, 0.01, 1.0, resolution=0.01, is_int=False, label_width=22, indent=10, control_length=90))
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Min Digits for Ratio Chk:", min_digits_for_ratio_check_var, 1, 50, is_int=True, label_width=22, indent=10, control_length=90))
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Max Consecutive Digits:", max_consecutive_digits_var, 3, 50, is_int=True, label_width=22, indent=10, control_length=90))
-    temp_number_controls.extend(create_synchronized_setting(col2_frame, "Min Words to Exempt:", min_words_to_exempt_digits_var, 0, 50, is_int=True, label_width=22, indent=10, control_length=90))
-    remove_number_heavy_var.trace_add("write", lambda *args: toggle_controls_state(remove_number_heavy_var, temp_number_controls))
-    toggle_controls_state(remove_number_heavy_var, temp_number_controls)
-
-    Label(col2_frame, text="Paragraph Structure Filter:", font=('Helvetica', 9, 'bold')).pack(side=TOP, pady=(10,0), anchor=NW, padx=5)
-    cb_para_filter = Checkbutton(col2_frame, text="Enable", variable=para_filter_enabled_var)
-    cb_para_filter.pack(side=TOP, anchor=W, padx=15)
-    para_sensitivity_controls = []
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Sentences / Para:", para_min_sentences_var, 1, 20, is_int=True, label_width=22, indent=10, control_length=90))
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Words / Para:", para_min_words_var, 1, 200, resolution=5, is_int=True, label_width=22, indent=10, control_length=90))
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Min Avg Sent. Len:", para_min_avg_len_var, 1, 50, is_int=True, label_width=22, indent=10, control_length=90))
-    para_sensitivity_controls.extend(create_synchronized_setting(col2_frame, "Max Avg Sent. Len:", para_max_avg_len_var, 5, 100, is_int=True, label_width=22, indent=10, control_length=90))
-    para_filter_enabled_var.trace_add("write", lambda *args: toggle_controls_state(para_filter_enabled_var, para_sensitivity_controls))
-    toggle_controls_state(para_filter_enabled_var, para_sensitivity_controls)
-
-    # --- Column 3: File Handling & Output ---
-    Label(col3_frame, text="File & Output Options:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-    file_mode_frame = Frame(col3_frame, relief=tk.FLAT, borderwidth=0); file_mode_frame.pack(side=TOP, fill=X, padx=5, pady=(5,0))
-    Label(file_mode_frame, text="File Processing Mode:").pack(side=TOP, anchor=W)
-    Radiobutton(file_mode_frame, text="Specified Exts Only", variable=file_processing_mode_var, value="specified").pack(side=TOP, anchor=W, padx=10)
-    Radiobutton(file_mode_frame, text="Attempt All Dropped Files", variable=file_processing_mode_var, value="all_files").pack(side=TOP, anchor=W, padx=10)
-    create_entry_setting(col3_frame, "Process ONLY these (,.ext):", include_extensions_var, entry_width=20, label_width=22)
-    create_entry_setting(col3_frame, "Always IGNORE these (,.ext):", ignore_extensions_var, entry_width=20, label_width=22)
-    create_entry_setting(col3_frame, "Additional Text Exts:", custom_file_extensions_var, entry_width=20, label_width=22)
-    create_entry_setting(col3_frame, "Output File Suffix:", custom_output_suffix_var, entry_width=20, label_width=22)
-    create_synchronized_setting(col3_frame, "Pages to Process (0=all):", pages_to_process_var, 0, 500, is_int=True, label_width=22, control_length=80)
-    create_synchronized_setting(col3_frame, "File Processing Timeout (secs):", file_processing_timeout_var, 1, 300, is_int=True, label_width=22, control_length=80)
-
-    url_frame = Frame(col3_frame, relief=tk.FLAT, borderwidth=0); url_frame.pack(side=TOP, fill=X, padx=5, pady=(5,2))
-    Checkbutton(url_frame, text="Extract and list URLs", variable=extract_urls_enabled_var).pack(side=LEFT, anchor=W)
-    Label(url_frame, text="(Appends to output)", font=('Helvetica', 8, 'italic')).pack(side=LEFT, anchor=W, padx=(2,0))
-
-    Label(col3_frame, text="Consolidate Output:", font=('Helvetica', 9, 'bold')).pack(side=TOP, pady=(10,0), anchor=NW, padx=5)
-    consolidation_controls = []
-    cb_consolidate = Checkbutton(col3_frame, text="Enable Consolidation", variable=consolidate_output_enabled_var)
-    cb_consolidate.pack(side=TOP, anchor=W, padx=15)
-    consolidation_controls.append(create_entry_setting(col3_frame, "Consolidated Filename:", consolidated_output_filename_var, entry_width=20, label_width=22, indent=10))
-
-    def update_consolidation_controls(*args):
-        toggle_controls_state(consolidate_output_enabled_var, consolidation_controls)
-    consolidate_output_enabled_var.trace_add("write", update_consolidation_controls)
-    update_consolidation_controls()
-
-    # --- Column 4: Advanced Filter Toggles & Basic Sensitivities ---
-    Label(col4_frame, text="Advanced Toggles & Params:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-    cb_remove_code = Checkbutton(col4_frame, text="Enable Code Block Filter", variable=remove_code_blocks_var)
-    cb_remove_code.pack(side=TOP, anchor=W, padx=5)
-    cb_remove_concat = Checkbutton(col4_frame, text="Concatenated: Remove Entirely", variable=remove_concat_entirely_var)
-    cb_remove_concat.pack(side=TOP, anchor=W, padx=5)
-    cb_remove_symbol = Checkbutton(col4_frame, text="Enable Symbol-Enclosed Filter", variable=remove_symbol_enclosed_var)
-    cb_remove_symbol.pack(side=TOP, anchor=W, padx=5)
-    cb_custom_regex = Checkbutton(col4_frame, text="Enable Custom Regex Filter", variable=custom_regex_enabled_var)
-    cb_custom_regex.pack(side=TOP, anchor=W, padx=5, pady=(0,10))
-    concat_sensitivity_label = Label(col4_frame, text="Concatenated Word Def.:", font=('Helvetica', 9, 'italic'))
-    concat_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
-    create_synchronized_setting(col4_frame, "Min Length to Check:", min_len_concat_check_var, 10, 50, is_int=True, label_width=20, control_length=80, indent=10)
-    create_synchronized_setting(col4_frame, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10, is_int=True, label_width=20, control_length=80, indent=10)
-    symbol_sensitivity_label = Label(col4_frame, text="Symbol-Enclosed Sens.:", font=('Helvetica', 9, 'italic'))
-    symbol_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5); temp_symbol_controls = []
-    temp_symbol_controls.extend(create_synchronized_setting(col4_frame, "Max Symbols Around:", max_symbols_around_var, 1, 5, is_int=True, label_width=20, control_length=80, indent=10))
-    remove_symbol_enclosed_var.trace_add("write", lambda *args: toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label]))
-    toggle_controls_state(remove_symbol_enclosed_var, temp_symbol_controls + [symbol_sensitivity_label])
-
-    # --- Column 5: Code Filter & Custom Regex Details ---
-    Label(col5_frame, text="Code & Regex Details:", font=('Helvetica', 10, 'bold')).pack(side=TOP, pady=(5,2), anchor=NW, padx=5)
-    code_sensitivity_label = Label(col5_frame, text="Code Filter Sensitivity:", font=('Helvetica', 9, 'italic'))
-    code_sensitivity_label.pack(side=TOP, pady=(5,0), anchor=NW, padx=5); temp_code_controls = []
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Keywords:", min_code_keywords_var, 0, 20, is_int=True, label_width=20, control_length=80, indent=10))
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Code Symbols:", min_code_symbols_var, 0, 30, is_int=True, label_width=20, control_length=80, indent=10))
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Min Words in Seg:", min_words_code_check_var, 1, 20, is_int=True, label_width=20, control_length=80, indent=10))
-    temp_code_controls.extend(create_synchronized_setting(col5_frame, "Symbol Density >", code_symbol_density_var, 0.01, 0.5, resolution=0.01, is_int=False, label_width=20, control_length=80, indent=10))
-    code_symbol_mode_frame = Frame(col5_frame, relief=tk.FLAT, borderwidth=0); code_symbol_mode_frame.pack(side=TOP, fill=X, padx=(15, 5))
-    Label(code_symbol_mode_frame, text="Symbol Mode:").pack(side=TOP, anchor=W)
-    Radiobutton(code_symbol_mode_frame, text="All Pre-def", variable=code_symbol_mode_var, value="all").pack(side=LEFT, padx=1)
-    Radiobutton(code_symbol_mode_frame, text="Only These", variable=code_symbol_mode_var, value="only").pack(side=LEFT, padx=1)
-    Radiobutton(code_symbol_mode_frame, text="All Except", variable=code_symbol_mode_var, value="except").pack(side=LEFT, padx=1)
-    custom_symbol_entry = create_entry_setting(col5_frame, "Custom Symbols:", code_custom_symbols_var, entry_width=20, indent=15, label_width=20)
-    temp_code_controls.extend([code_sensitivity_label, code_symbol_mode_frame, custom_symbol_entry])
-    remove_code_blocks_var.trace_add("write", lambda *args: toggle_controls_state(remove_code_blocks_var, temp_code_controls))
-    toggle_controls_state(remove_code_blocks_var, temp_code_controls)
-    regex_sensitivity_label = Label(col5_frame, text="Custom Regex Details:", font=('Helvetica', 9, 'italic'))
-    regex_sensitivity_label.pack(side=TOP, pady=(10,0), anchor=NW, padx=5); temp_regex_controls = []
-    regex_entry_widget = create_entry_setting(col5_frame, "Regex Pattern:", custom_regex_pattern_var, entry_width=25, indent=15, label_width=20)
-    temp_regex_controls.append(regex_entry_widget)
-    regex_mode_frame_col5 = Frame(col5_frame, relief=tk.FLAT, borderwidth=0); regex_mode_frame_col5.pack(side=TOP, fill=X, padx=(20,5))
-    Label(regex_mode_frame_col5, text="Mode:").pack(side=LEFT)
-    rb_remove = Radiobutton(regex_mode_frame_col5, text="Remove", variable=custom_regex_mode_var, value="remove_matches")
-    rb_remove.pack(side=LEFT, padx=1); temp_regex_controls.append(rb_remove)
-    rb_keep = Radiobutton(regex_mode_frame_col5, text="Keep Only", variable=custom_regex_mode_var, value="keep_matches")
-    rb_keep.pack(side=LEFT, padx=1); temp_regex_controls.append(rb_keep)
-    cb_case_sensitive = Checkbutton(regex_mode_frame_col5, text="Case Sens.", variable=custom_regex_case_sensitive_var)
-    cb_case_sensitive.pack(side=LEFT, padx=2); temp_regex_controls.append(cb_case_sensitive)
-    custom_regex_enabled_var.trace_add("write", lambda *args: toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label]))
-    toggle_controls_state(custom_regex_enabled_var, temp_regex_controls + [regex_sensitivity_label])
-
-# --- TEST PAD UI AND LOGIC ---
-def run_test_pad_processing():
-    """Runs the text processing logic on the content of the input text pad."""
-    if not g_test_pad_input_text or not g_test_pad_output_text:
-        return
-
-    input_text = g_test_pad_input_text.get("1.0", END)
-    params = {var_name: globals()[var_name].get() for var_name in SETTINGS_CONFIG.keys()}
-    output_text = process_text(input_text, params)
-
-    g_test_pad_output_text.config(state=NORMAL)
-    g_test_pad_output_text.delete("1.0", END)
-    g_test_pad_output_text.insert("1.0", output_text)
-    g_test_pad_output_text.config(state=DISABLED)
-
-def populate_test_pad_ui(parent):
-    """Creates the UI for the interactive test pad."""
-    global g_test_pad_input_text, g_test_pad_output_text
-    
-    test_pad_header = Frame(parent); test_pad_header.pack(side=TOP, fill=X, padx=5, pady=5)
-    Label(test_pad_header, text="Test Pad", font=('Helvetica', 12, 'bold')).pack(side=LEFT, anchor=W)
-    Button(test_pad_header, text="Run Test with Current Settings", command=run_test_pad_processing).pack(side=RIGHT, padx=5)
-
-    pw = PanedWindow(parent, orient=HORIZONTAL, sashrelief=RAISED)
-    pw.pack(fill=BOTH, expand=True, padx=5, pady=(0,5))
-
-    input_frame = Frame(pw, relief=SUNKEN, borderwidth=1); pw.add(input_frame, width=450)
-    Label(input_frame, text="PASTE TEXT TO TEST HERE", font=('Helvetica', 9, 'bold')).pack(side=TOP, fill=X, padx=2, pady=2)
-    input_text_frame = Frame(input_frame)
-    input_text_frame.pack(fill=BOTH, expand=True)
-    input_scrollbar = Scrollbar(input_text_frame)
-    input_scrollbar.pack(side=RIGHT, fill=Y)
-    g_test_pad_input_text = Text(input_text_frame, wrap=tk.WORD, yscrollcommand=input_scrollbar.set, undo=True)
-    g_test_pad_input_text.pack(side=LEFT, fill=BOTH, expand=True)
-    input_scrollbar.config(command=g_test_pad_input_text.yview)
-
-    output_frame = Frame(pw, relief=SUNKEN, borderwidth=1); pw.add(output_frame)
-    Label(output_frame, text="FILTERED OUTPUT", font=('Helvetica', 9, 'bold')).pack(side=TOP, fill=X, padx=2, pady=2)
-    output_text_frame = Frame(output_frame)
-    output_text_frame.pack(fill=BOTH, expand=True)
-    output_scrollbar = Scrollbar(output_text_frame)
-    output_scrollbar.pack(side=RIGHT, fill=Y)
-    g_test_pad_output_text = Text(output_text_frame, wrap=tk.WORD, yscrollcommand=output_scrollbar.set, state=DISABLED)
-    g_test_pad_output_text.pack(side=LEFT, fill=BOTH, expand=True)
-    output_scrollbar.config(command=g_test_pad_output_text.yview)
-
-# --- FILE PROCESSING ---
 def reset_consolidated_file():
     if consolidate_output_enabled_var.get() == 1:
         consolidated_filename = consolidated_output_filename_var.get().strip()
@@ -642,21 +443,15 @@ def append_to_consolidated(filename, content):
                 outfile.write(f"\n\n--- End of file: {os.path.basename(filename)} ---\n\n")
         except Exception as e:
             print(f"ERROR: Failed to append to consolidated file: {e}")
-
 def _process_file_in_process(filepath, params, result_queue):
-    # DEBUG: This is the entry point for the separate worker process.
-    print(f"## DEBUG: WORKER PROCESS STARTED for {os.path.basename(filepath)} (PID: {os.getpid()})")
-    
     def extract_text_from_txt(filepath):
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f: return f.read()
-        except Exception:
-            return ""
+        except Exception: return ""
     def extract_text_from_docx(filepath):
         try:
             doc = Document(filepath); return '\n'.join([para.text for para in doc.paragraphs])
-        except Exception:
-            return ""
+        except Exception: return ""
     def extract_text_from_pdf(filepath, pages_to_process):
         text = ""
         try:
@@ -671,8 +466,7 @@ def _process_file_in_process(filepath, params, result_queue):
                     page_text = reader.pages[i].extract_text()
                     text += (page_text + "\n") if page_text else ""
         except Exception as e:
-            # DEBUG: More specific error for PDF extraction
-            print(f"## DEBUG: WORKER ERROR in extract_text_from_pdf: {e}")
+            print(f"ERROR: Exception in extract_text_from_pdf: {e}")
             return ""
         return text
     def extract_and_format_urls(text_content):
@@ -702,15 +496,11 @@ def _process_file_in_process(filepath, params, result_queue):
             url_list_string = "\n\n--- Detected URLs ---\n" + "\n".join(unique_display_urls)
             return url_list_string, unique_display_urls
         return "", []
-
     try:
         _, extension_raw = os.path.splitext(filepath)
         extension = extension_raw.lower()
         raw_full_text = ""
         pages_to_process = params['pages_to_process_var']
-        
-        # DEBUG: Log which extraction function is being called.
-        print(f"## DEBUG: WORKER attempting to extract text from '{extension}' file.")
         if extension == '.docx':
             raw_full_text = extract_text_from_docx(filepath)
         elif extension == '.pdf':
@@ -722,53 +512,31 @@ def _process_file_in_process(filepath, params, result_queue):
         elif params['file_processing_mode_var'] == "all_files":
             raw_full_text = extract_text_from_txt(filepath)
         else:
-            print(f"## DEBUG: WORKER skipping file with unknown extension '{extension}'.")
             result_queue.put(('skipped_unknown', f"Skipped (unknown extension '{extension}'): {os.path.basename(filepath)}."))
             return
-
-        print(f"## DEBUG: WORKER extracted {len(raw_full_text)} characters.")
         if not raw_full_text and os.path.getsize(filepath) > 0:
-            print(f"## DEBUG: WORKER failed to extract any text.")
             result_queue.put(('error', f"No text could be extracted from {os.path.basename(filepath)}. Check file integrity or type."))
             return
-        
         formatted_urls_from_raw = ""
         if params['extract_urls_enabled_var'] == 1 and raw_full_text is not None :
             formatted_urls_from_raw, _ = extract_and_format_urls(raw_full_text)
-        
-        print("## DEBUG: WORKER starting text processing filters.")
         processed_text_content = process_text(raw_full_text if raw_full_text is not None else "", params)
-        print(f"## DEBUG: WORKER finished filtering. Processed text length: {len(processed_text_content)}.")
-                                            
         final_output_data = processed_text_content
         if not final_output_data.strip() and formatted_urls_from_raw:
             final_output_data = "<No main content passed filters>" + formatted_urls_from_raw
         elif final_output_data.strip() and formatted_urls_from_raw:
             final_output_data += formatted_urls_from_raw
-        
         if not final_output_data.strip():
-            print("## DEBUG: WORKER found no content passed filters.")
             result_queue.put(('skipped_empty', f"No content passed filters or URLs found for {os.path.basename(filepath)}."))
             return
-            
-        print("## DEBUG: WORKER successfully processed file, putting result in queue.")
         result_queue.put(('success', final_output_data))
-    
     except Exception as e:
-        # DEBUG: Catch-all for any crash inside the worker process
-        print(f"## DEBUG: WORKER CRASHED for {os.path.basename(filepath)} with error: {e}")
-        print(traceback.format_exc())
         result_queue.put(('error', f"An unexpected error occurred during processing: {e}"))
-    finally:
-        # DEBUG: This will run whether the process succeeded or failed.
-        print(f"## DEBUG: WORKER PROCESS FINISHED for {os.path.basename(filepath)} (PID: {os.getpid()})")
-        
+        print(f"ERROR: Exception in worker process for {filepath}: {traceback.format_exc()}")
 def _process_file_inner(filepath):
-    print(f"## DEBUG: Parent process starting _process_file_inner for {os.path.basename(filepath)}")
     if not os.path.exists(filepath):
         g_message_queue.put(('error', f"Error: File not found {filepath}"))
         return
-    
     filename_base, extension_raw = os.path.splitext(filepath)
     extension = extension_raw.lower()
     raw_ignore_ext_str = ignore_extensions_var.get()
@@ -776,54 +544,33 @@ def _process_file_inner(filepath):
     if extension in parsed_ignore_extensions:
         g_message_queue.put(('status', f"Skipped (ignored ext): {os.path.basename(filepath)}"))
         return
-    
     params = {var_name: globals()[var_name].get() for var_name in SETTINGS_CONFIG.keys()}
-    print("## DEBUG: Parent gathered settings parameters.")
-    
     result_queue = multiprocessing.Queue()
     worker_process = multiprocessing.Process(target=_process_file_in_process, args=(filepath, params, result_queue))
-    
-    print(f"## DEBUG: Parent starting worker process for {os.path.basename(filepath)}...")
     worker_process.start()
-    
     timeout_val = file_processing_timeout_var.get()
     status, result = None, None
-    
     try:
-        # Get the result from the queue FIRST, with a timeout.
-        print(f"## DEBUG: Parent waiting for result from queue (timeout: {timeout_val}s)...")
         status, result = result_queue.get(timeout=timeout_val)
-        print(f"## DEBUG: Parent got result from queue. Status: {status}")
     except queue.Empty:
-        # If we get nothing after the timeout, the worker is stuck.
-        print("## DEBUG: Parent timed out waiting for queue result. Terminating worker.")
         g_message_queue.put(('error', f"Processing timed out for {os.path.basename(filepath)} (worker unresponsive)."))
         if worker_process.is_alive():
             worker_process.terminate()
     finally:
-        # Always join the process to clean it up.
-        print("## DEBUG: Parent joining worker process to clean up.")
         worker_process.join()
-
-    # If status is still None, it means we timed out and already logged an error.
     if status is None:
         return
-
-    # Now, process the result that we successfully retrieved.
     if status == 'error':
         g_message_queue.put(('error', f"Error processing {os.path.basename(filepath)}: {result}"))
         return
     elif status == 'skipped_unknown' or status == 'skipped_empty':
         g_message_queue.put(('status', result))
         return
-
     final_output_data = result
     user_suffix = custom_output_suffix_var.get().strip()
     actual_suffix = user_suffix if user_suffix else DEFAULT_OUTPUT_FILE_SUFFIX
     output_filepath = filename_base + actual_suffix + ".txt"
-
     try:
-        print(f"## DEBUG: Parent writing output to file: {os.path.basename(output_filepath)}")
         if consolidate_output_enabled_var.get() == 0:
             with open(output_filepath, 'w', encoding='utf-8') as f_out: f_out.write(final_output_data)
             g_message_queue.put(('status', f"Successfully processed: {os.path.basename(filepath)}\nSaved to: {os.path.basename(output_filepath)}"))
@@ -831,48 +578,30 @@ def _process_file_inner(filepath):
             append_to_consolidated(filepath, final_output_data)
             g_message_queue.put(('status', f"Appended output from: {os.path.basename(filepath)} to consolidated file."))
     except Exception as e:
-        print(f"## DEBUG: Parent ERROR writing output file: {e}")
         g_message_queue.put(('error', f"Error writing output for {os.path.basename(filepath)}: {e}"))
-
-    if status == 'error':
-        g_message_queue.put(('error', f"Error processing {os.path.basename(filepath)}: {result}"))
-        return
-    elif status == 'skipped_unknown' or status == 'skipped_empty':
-        g_message_queue.put(('status', result))
-        return
-
-    final_output_data = result
-    user_suffix = custom_output_suffix_var.get().strip()
-    actual_suffix = user_suffix if user_suffix else DEFAULT_OUTPUT_FILE_SUFFIX
-    output_filepath = filename_base + actual_suffix + ".txt"
-
-    try:
-        print(f"## DEBUG: Parent writing output to file: {os.path.basename(output_filepath)}")
-        if consolidate_output_enabled_var.get() == 0:
-            with open(output_filepath, 'w', encoding='utf-8') as f_out: f_out.write(final_output_data)
-            g_message_queue.put(('status', f"Successfully processed: {os.path.basename(filepath)}\nSaved to: {os.path.basename(output_filepath)}"))
-        else:
-            append_to_consolidated(filepath, final_output_data)
-            g_message_queue.put(('status', f"Appended output from: {os.path.basename(filepath)} to consolidated file."))
-    except Exception as e:
-        print(f"## DEBUG: Parent ERROR writing output file: {e}")
-        g_message_queue.put(('error', f"Error writing output for {os.path.basename(filepath)}: {e}"))
-
 def process_files_in_thread(filepaths):
-    print("## DEBUG: Background thread started for processing file list.")
+    global g_stop_event
     total_files = len(filepaths)
     for i, filepath in enumerate(filepaths):
+        # <<< CHANGE 4a: Check the stop flag before processing each file
+        if g_stop_event.is_set():
+            break
+        
         file_number = i + 1
         g_message_queue.put(('status', f"Processing file {file_number} of {total_files}: {os.path.basename(filepath)}..."))
         try:
             _process_file_inner(filepath)
         except Exception as e:
-            print(f"## DEBUG: Critical error in background thread: {e}")
             g_message_queue.put(('error', f"Critical error processing {os.path.basename(filepath)}: {e}"))
-    g_message_queue.put(('status', f"Finished processing all {total_files} files."))
-    print("## DEBUG: Background thread finished.")
+
+    # <<< CHANGE 4b: Add a final message indicating if the process was stopped or finished
+    if g_stop_event.is_set():
+        g_message_queue.put(('status', "Processing stopped by user."))
+    else:
+        g_message_queue.put(('status', f"Finished processing all {total_files} files."))
 
 def check_for_updates():
+    global g_stop_button
     while not g_message_queue.empty():
         try:
             msg_type, msg = g_message_queue.get_nowait()
@@ -880,31 +609,44 @@ def check_for_updates():
             g_message_queue.task_done()
         except queue.Empty:
             break
+            
+    # <<< CHANGE 3b: Manage the button state after processing
     if 'processing_thread' in globals() and globals()['processing_thread'].is_alive():
         root.after(100, check_for_updates)
+    else:
+        # Once the thread is finished, disable the stop button
+        if g_stop_button:
+            g_stop_button.configure(state=DISABLED)
 
 def process_file(filepaths):
-    global g_processed_files_list
-    print("## DEBUG: process_file called.")
+    global g_processed_files_list, g_stop_button, g_stop_event
     if 'processing_thread' in globals() and globals()['processing_thread'].is_alive():
-        print("## DEBUG: A processing thread is already active.")
         log_message("A processing task is already running.", level='error')
         return
-
+    
+    # <<< CHANGE 3a: Reset the flag and enable the button before starting
+    g_stop_event.clear()
+    if g_stop_button:
+        g_stop_button.configure(state=NORMAL)
+        
     g_processed_files_list = filepaths
     reset_consolidated_file()
-
-    print("## DEBUG: Creating and starting the background processing thread.")
     globals()['processing_thread'] = threading.Thread(target=process_files_in_thread, args=(g_processed_files_list,))
     globals()['processing_thread'].daemon = True
     globals()['processing_thread'].start()
     root.after(100, check_for_updates)
 
+def stop_processing():
+    # <<< CHANGE 2: Function to be called by the stop button
+    global g_stop_event, g_stop_button
+    log_message("Stop request received. Finishing current file...")
+    g_stop_event.set()
+    if g_stop_button:
+        g_stop_button.configure(state=DISABLED) # Prevent multiple clicks
+
 def drop_handler(event):
-    print(f"## DEBUG: Drop event received. Data: {event.data}")
     filepaths_str = event.data
     if not filepaths_str: return
-    
     paths = []
     if filepaths_str.startswith('{') and filepaths_str.endswith('}'):
         path_segments = re.findall(r'\{[^{}]*\}|\S+', filepaths_str)
@@ -913,16 +655,9 @@ def drop_handler(event):
     elif ' ' in filepaths_str and not os.path.exists(filepaths_str): paths = filepaths_str.split(' ')
     else: paths = [filepaths_str]
     actual_files = [p.strip() for p in paths if os.path.isfile(p.strip())]
-    if not actual_files: 
-        print("## DEBUG: No valid files found in drop data.")
-        log_message("Could not identify valid file(s) from drop.", level='error'); 
-        return
-    
-    print(f"## DEBUG: Parsed files from drop: {actual_files}")
+    if not actual_files: log_message("Could not identify valid file(s) from drop.", level='error'); return
     process_file(actual_files)
-
 def process_file_list():
-    print("## DEBUG: 'Process from List' button clicked.")
     file_path = filedialog.askopenfilename(
         title="Select a file list (.txt)",
         filetypes=[("Text files", "*.txt")]
@@ -930,9 +665,7 @@ def process_file_list():
     if not file_path:
         log_message("File selection canceled.")
         return
-        
     reset_consolidated_file()
-
     log_message(f"Reading file list from {os.path.basename(file_path)}...")
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -944,73 +677,224 @@ def process_file_list():
         log_message("File list is empty or invalid.", level='error')
         return
     log_message(f"Processing {len(file_paths)} files from list...")
-    
-    print(f"## DEBUG: Parsed files from list file: {file_paths}")
     process_file(file_paths)
 
-# --- Main Application Setup ---
+
+def populate_settings_content(parent_container):
+    canvas = ctk.CTkCanvas(parent_container, highlightthickness=0, bg="white")
+    v_scrollbar = ctk.CTkScrollbar(parent_container, orientation="vertical", command=canvas.yview,
+                                   fg_color="white", button_color="black", button_hover_color="black")
+    h_scrollbar = ctk.CTkScrollbar(parent_container, orientation="horizontal", command=canvas.xview,
+                                   fg_color="white", button_color="black", button_hover_color="black")
+    
+    content_frame = ctk.CTkFrame(canvas, width=1150, fg_color="white")
+
+    canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+    canvas_window = canvas.create_window((0, 0), window=content_frame, anchor="nw")
+
+    def on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        
+    def on_canvas_configure(event):
+        if content_frame.winfo_width() < event.width:
+             canvas.itemconfig(canvas_window, width=event.width)
+
+    content_frame.bind("<Configure>", on_frame_configure)
+    canvas.bind("<Configure>", on_canvas_configure)
+    
+    parent_container.grid_rowconfigure(0, weight=1)
+    parent_container.grid_columnconfigure(0, weight=1)
+    
+    canvas.grid(row=0, column=0, sticky="nsew")
+    v_scrollbar.grid(row=0, column=1, sticky="ns")
+    h_scrollbar.grid(row=1, column=0, sticky="ew")
+
+    content_frame.grid_columnconfigure((0, 1), weight=2)
+    content_frame.grid_columnconfigure((2, 3, 4), weight=3)
+
+    col_padx = (5, 5)
+    col1_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    col2_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    col3_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    col4_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+    col5_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+
+    col1_frame.grid(row=0, column=0, sticky="nsew", padx=col_padx, pady=5)
+    col2_frame.grid(row=0, column=1, sticky="nsew", padx=col_padx, pady=5)
+    col3_frame.grid(row=0, column=2, sticky="nsew", padx=col_padx, pady=5)
+    col4_frame.grid(row=0, column=3, sticky="nsew", padx=col_padx, pady=5)
+    col5_frame.grid(row=0, column=4, sticky="nsew", padx=col_padx, pady=5)
+
+    def create_header(parent, text):
+        ctk.CTkLabel(parent, text=text, font=("", 14, "bold"), text_color="black").pack(side=TOP, pady=(5, 5), anchor=NW, padx=5)
+
+    create_header(col1_frame, "Pre-Filter & Basic Segmentation:")
+    ctk.CTkCheckBox(col1_frame, text="Enable Pre-Filter / Segmentation", variable=pre_filter_enabled_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=5, pady=(0, 5))
+    ctk.CTkLabel(col1_frame, text="HTML Stripping Mode:", font=("", 12, "bold"), text_color="black").pack(side=TOP, anchor=W, padx=5, pady=(5,2))
+    ctk.CTkRadioButton(col1_frame, text="Off", variable=html_stripping_mode_var, value="off", text_color="black", fg_color="black", border_color="black").pack(side=TOP, anchor=W, padx=15, pady=1)
+    ctk.CTkRadioButton(col1_frame, text="Strip Tags & Keep Content", variable=html_stripping_mode_var, value="strip_tags", text_color="black", fg_color="black", border_color="black").pack(side=TOP, anchor=W, padx=15, pady=1)
+    ctk.CTkRadioButton(col1_frame, text="Discard Segments w/ Tags", variable=html_stripping_mode_var, value="discard_segments", text_color="black", fg_color="black", border_color="black").pack(side=TOP, anchor=W, padx=15, pady=1)
+    create_synchronized_setting(col1_frame, "Min Words (General Seq):", min_words_general_var, 1, 100, is_int=True, label_width=24)
+    create_synchronized_setting(col1_frame, "Min Words (Punctuated Sent.):", min_words_sentence_var, 1, 50, is_int=True, label_width=24)
+    create_synchronized_setting(col1_frame, "Max Chars Seg (for NL split):", max_segment_len_var, 50, 2000, is_int=True, label_width=24)
+
+    create_header(col2_frame, "Content Structure Filters:")
+    ctk.CTkLabel(col2_frame, text="Alphanumeric Filter:", font=("", 12, "bold"), text_color="black").pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    ctk.CTkCheckBox(col2_frame, text="Enable", variable=alphanum_filter_enabled_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=15, pady=(2,5))
+    create_synchronized_setting(col2_frame, "Ratio Threshold:", alphanum_threshold_var, 0.0, 1.0, is_int=False, label_width=22, indent=10)
+    create_synchronized_setting(col2_frame, "Min Seg Len for Ratio Test:", alnum_min_len_for_ratio_var, 1, 50, is_int=True, label_width=22, indent=10)
+    create_synchronized_setting(col2_frame, "Abs Alnum Fallback Count:", alnum_abs_count_fallback_var, 0, 100, is_int=True, label_width=22, indent=10)
+    ctk.CTkLabel(col2_frame, text="Number-Heavy Filter:", font=("", 12, "bold"), text_color="black").pack(side=TOP, pady=(10,0), anchor=NW, padx=5)
+    ctk.CTkCheckBox(col2_frame, text="Enable", variable=remove_number_heavy_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=15, pady=(2,5))
+    create_synchronized_setting(col2_frame, "Digit Ratio Threshold >", number_ratio_threshold_var, 0.01, 1.0, is_int=False, label_width=22, indent=10)
+    create_synchronized_setting(col2_frame, "Min Digits for Ratio Chk:", min_digits_for_ratio_check_var, 1, 50, is_int=True, label_width=22, indent=10)
+    
+    create_header(col3_frame, "File & Output Options:")
+    ctk.CTkLabel(col3_frame, text="File Processing Mode:", text_color="black").pack(side=TOP, anchor=W, padx=5)
+    ctk.CTkRadioButton(col3_frame, text="Specified Exts Only", variable=file_processing_mode_var, value="specified", text_color="black", fg_color="black", border_color="black").pack(side=TOP, anchor=W, padx=15, pady=1)
+    ctk.CTkRadioButton(col3_frame, text="Attempt All Dropped Files", variable=file_processing_mode_var, value="all_files", text_color="black", fg_color="black", border_color="black").pack(side=TOP, anchor=W, padx=15, pady=1)
+    create_entry_setting(col3_frame, "Process ONLY these (,.ext):", include_extensions_var, label_width=22)
+    create_entry_setting(col3_frame, "Always IGNORE these (,.ext):", ignore_extensions_var, label_width=22)
+    create_entry_setting(col3_frame, "Additional Text Exts:", custom_file_extensions_var, label_width=22)
+    create_entry_setting(col3_frame, "Output File Suffix:", custom_output_suffix_var, label_width=22)
+    create_synchronized_setting(col3_frame, "Pages to Process (0=all):", pages_to_process_var, 0, 500, is_int=True, label_width=22)
+    create_synchronized_setting(col3_frame, "File Processing Timeout (secs):", file_processing_timeout_var, 1, 300, is_int=True, label_width=22)
+    ctk.CTkCheckBox(col3_frame, text="Extract and list URLs (Appends to output)", variable=extract_urls_enabled_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=5, pady=(5,2))
+    ctk.CTkCheckBox(col3_frame, text="Enable Consolidation", variable=consolidate_output_enabled_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=5, pady=(10,0))
+    create_entry_setting(col3_frame, "Consolidated Filename:", consolidated_output_filename_var, label_width=22, indent=10)
+
+    create_header(col4_frame, "Advanced Toggles & Params:")
+    ctk.CTkCheckBox(col4_frame, text="Enable Code Block Filter", variable=remove_code_blocks_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=5)
+    ctk.CTkCheckBox(col4_frame, text="Concatenated: Remove Entirely", variable=remove_concat_entirely_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=5)
+    ctk.CTkCheckBox(col4_frame, text="Enable Symbol-Enclosed Filter", variable=remove_symbol_enclosed_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=5)
+    ctk.CTkCheckBox(col4_frame, text="Enable Custom Regex Filter", variable=custom_regex_enabled_var, text_color="black", border_color="black", checkmark_color="black").pack(side=TOP, anchor=W, padx=5, pady=(0,10))
+    ctk.CTkLabel(col4_frame, text="Concatenated Word Def.:", font=("", 12, "italic"), text_color="black").pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    create_synchronized_setting(col4_frame, "Min Length to Check:", min_len_concat_check_var, 10, 50, is_int=True, label_width=20, indent=10)
+    create_synchronized_setting(col4_frame, "Min Sub-Words to Act:", min_sub_words_replace_var, 2, 10, is_int=True, label_width=20, indent=10)
+    ctk.CTkLabel(col4_frame, text="Symbol-Enclosed Sens.:", font=("", 12, "italic"), text_color="black").pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    create_synchronized_setting(col4_frame, "Max Symbols Around:", max_symbols_around_var, 1, 5, is_int=True, label_width=20, indent=10)
+    
+    create_header(col5_frame, "Code & Regex Details:")
+    ctk.CTkLabel(col5_frame, text="Code Filter Sensitivity:", font=("", 12, "italic"), text_color="black").pack(side=TOP, pady=(5,0), anchor=NW, padx=5)
+    create_synchronized_setting(col5_frame, "Min Keywords:", min_code_keywords_var, 0, 20, is_int=True, label_width=20, indent=10)
+    create_synchronized_setting(col5_frame, "Min Code Symbols:", min_code_symbols_var, 0, 30, is_int=True, label_width=20, indent=10)
+    create_synchronized_setting(col5_frame, "Min Words in Seg:", min_words_code_check_var, 1, 20, is_int=True, label_width=20, indent=10)
+    create_synchronized_setting(col5_frame, "Symbol Density >", code_symbol_density_var, 0.01, 0.5, is_int=False, label_width=20, indent=10)
+    ctk.CTkLabel(col5_frame, text="Symbol Mode:", text_color="black").pack(side=TOP, anchor=W, padx=15, pady=(5,0))
+    radio_frame = ctk.CTkFrame(col5_frame, fg_color="transparent"); radio_frame.pack(fill=X, padx=15)
+    ctk.CTkRadioButton(radio_frame, text="All Pre-def", variable=code_symbol_mode_var, value="all", text_color="black", fg_color="black", border_color="black").pack(side=LEFT, padx=1)
+    ctk.CTkRadioButton(radio_frame, text="Only These", variable=code_symbol_mode_var, value="only", text_color="black", fg_color="black", border_color="black").pack(side=LEFT, padx=1)
+    ctk.CTkRadioButton(radio_frame, text="All Except", variable=code_symbol_mode_var, value="except", text_color="black", fg_color="black", border_color="black").pack(side=LEFT, padx=1)
+    create_entry_setting(col5_frame, "Custom Symbols:", code_custom_symbols_var, indent=15, label_width=20)
+
+def populate_test_pad_ui(parent):
+    global g_test_pad_input_text, g_test_pad_output_text
+    
+    parent.columnconfigure(0, weight=1)
+    parent.rowconfigure(1, weight=1)
+
+    test_pad_header = ctk.CTkFrame(parent, fg_color="transparent")
+    test_pad_header.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+    ctk.CTkLabel(test_pad_header, text="Test Pad", font=("", 16, "bold"), text_color="black").pack(side=LEFT, anchor=W)
+    ctk.CTkButton(test_pad_header, text="Run Test with Current Settings", command=run_test_pad_processing,
+                  fg_color="white", text_color="black", border_color="black", border_width=1, hover_color="white").pack(side=RIGHT)
+
+    pw = PanedWindow(parent, orient=tk.HORIZONTAL, sashrelief=RAISED, bg="white", sashwidth=6)
+    pw.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0,10))
+
+    input_frame = ctk.CTkFrame(pw, fg_color="white")
+    pw.add(input_frame, width=450)
+    input_frame.grid_rowconfigure(1, weight=1)
+    input_frame.grid_columnconfigure(0, weight=1)
+    ctk.CTkLabel(input_frame, text="PASTE TEXT TO TEST HERE", font=("", 12, "bold"), text_color="black").grid(row=0, column=0, sticky="ew", padx=5, pady=2)
+    g_test_pad_input_text = ctk.CTkTextbox(input_frame, wrap="word", undo=True, fg_color="white", text_color="black", border_width=1)
+    g_test_pad_input_text.grid(row=1, column=0, sticky="nsew", padx=5, pady=(0,5))
+    
+    output_frame = ctk.CTkFrame(pw, fg_color="white")
+    pw.add(output_frame)
+    output_frame.grid_rowconfigure(1, weight=1)
+    output_frame.grid_columnconfigure(0, weight=1)
+    ctk.CTkLabel(output_frame, text="FILTERED OUTPUT", font=("", 12, "bold"), text_color="black").grid(row=0, column=0, sticky="ew", padx=5, pady=2)
+    g_test_pad_output_text = ctk.CTkTextbox(output_frame, wrap="word", state=DISABLED, fg_color="white", text_color="black", border_width=1)
+    g_test_pad_output_text.grid(row=1, column=0, sticky="nsew", padx=5, pady=(0,5))
+
+def run_test_pad_processing():
+    input_text = g_test_pad_input_text.get("1.0", "end-1c")
+    params = {var_name: globals()[var_name].get() for var_name in SETTINGS_CONFIG.keys()}
+    output_text = process_text(input_text, params)
+    g_test_pad_output_text.configure(state=NORMAL)
+    g_test_pad_output_text.delete("1.0", END)
+    g_test_pad_output_text.insert("1.0", output_text)
+    g_test_pad_output_text.configure(state=DISABLED)
+
+# --- MAIN APPLICATION STARTUP ---
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-
-    if DND_AVAILABLE:
-        root = TkinterDnD.Tk()
-    else:
-        root = tk.Tk()
+    
+    ctk.set_appearance_mode("light")
+    ctk.set_default_color_theme("blue")
+    
+    root = CTkinterDnD() if DND_AVAILABLE else ctk.CTk()
+    root.configure(fg_color="white")
         
-    root.title(f"File Text Extractor v{APP_VERSION}"); root.geometry("950x800")
+    root.title(f"File Text Extractor v{APP_VERSION}"); root.geometry("1200x800")
+    root.minsize(800, 600)
     setup_variables(); load_app_settings()
     def on_main_window_close(): save_app_settings(); root.destroy()
     root.protocol("WM_DELETE_WINDOW", on_main_window_close)
     
-    # MODIFIED LAYOUT: All major frames will now expand and fill vertically.
-    
-    # 1. Settings (Top)
-    settings_container_frame = Frame(root, relief=SUNKEN, borderwidth=1)
-    settings_container_frame.pack(side=TOP, fill=BOTH, expand=True, padx=7, pady=(7,0)) 
-    Label(settings_container_frame, text="Filter Settings", font=('Helvetica', 12, 'bold')).pack(anchor=W, padx=5, pady=(5,2))
-    settings_scroll_canvas_frame = Frame(settings_container_frame); settings_scroll_canvas_frame.pack(fill=X, expand=False)
-    settings_canvas = tk.Canvas(settings_scroll_canvas_frame, borderwidth=0, height=350)
-    settings_scrollbar = ttk.Scrollbar(settings_scroll_canvas_frame, orient="vertical", command=settings_canvas.yview)
-    scrollable_settings_content_frame = ttk.Frame(settings_canvas)
-    scrollable_settings_content_frame.bind("<Configure>", lambda e: settings_canvas.configure(scrollregion=settings_canvas.bbox("all")))
-    settings_canvas_window = settings_canvas.create_window((0, 0), window=scrollable_settings_content_frame, anchor="nw", tags="settings_content_window")
-    def _configure_settings_content_width(event): settings_canvas.itemconfig("settings_content_window", width=event.width)
-    settings_canvas.bind("<Configure>", _configure_settings_content_width, add='+')
-    settings_canvas.configure(yscrollcommand=settings_scrollbar.set)
-    settings_canvas.pack(side=LEFT, fill=X, expand=True); settings_scrollbar.pack(side=RIGHT, fill=Y)
-    populate_settings_content(scrollable_settings_content_frame)
+    main_pane = PanedWindow(root, orient=VERTICAL, sashrelief=RAISED, bg="white", sashwidth=6)
+    main_pane.pack(fill=BOTH, expand=True, padx=10, pady=10)
 
-    # 4. Log Window (Packed to bottom FIRST, so it's at the very bottom)
-    log_frame = Frame(root, relief=SUNKEN, borderwidth=1)
-    log_frame.pack(side=BOTTOM, fill=BOTH, expand=True, padx=7, pady=(0,7))
-    log_scrollbar = Scrollbar(log_frame, orient=VERTICAL)
-    log_scrollbar.pack(side=RIGHT, fill=Y)
-    status_log = Text(log_frame, height=8, wrap=tk.WORD, yscrollcommand=log_scrollbar.set, relief=tk.FLAT, borderwidth=0)
-    status_log.pack(side=LEFT, fill=X, expand=True, padx=2)
-    log_scrollbar.config(command=status_log.yview)
-    status_log.tag_configure("error", foreground="red")
-    status_log.config(state=DISABLED)
-    
-    # 3. File Processing (Packed to bottom SECOND, so it's above the log)
-    file_processing_container_frame = Frame(root, relief=SUNKEN, borderwidth=1);
-    file_processing_container_frame.pack(side=BOTTOM, fill=BOTH, expand=True, padx=7, pady=(0,7))
-    Label(file_processing_container_frame, text="Process Files", font=('Helvetica', 12, 'bold')).pack(anchor=W, padx=5, pady=(5,2))
-    drop_target_label = Label(file_processing_container_frame,text="Supports any file - Drop here to process",bg="lightgrey",relief=SUNKEN,height=2)
-    drop_target_label.pack(padx=10, pady=(0,10), fill=X, expand=False)
-    if DND_AVAILABLE and DND_FILES is not None:
-        try:
-            drop_target_label.drop_target_register(DND_FILES)
-            drop_target_label.dnd_bind('<<Drop>>', drop_handler)
-        except Exception as e: print(f"ERROR: Failed to register DND: {e}")
-    process_list_button = Button(file_processing_container_frame, text="Process Files from List", command=process_file_list)
-    process_list_button.pack(padx=10, pady=(0, 10), fill=X, expand=False)
+    settings_container_frame = ctk.CTkFrame(main_pane, border_width=2, fg_color="white", border_color="black")
+    main_pane.add(settings_container_frame, height=360, minsize=200) 
+    populate_settings_content(settings_container_frame)
 
-    # 2. Test Pad (Middle, expands to fill remaining space)
-    test_pad_container_frame = Frame(root, relief=SUNKEN, borderwidth=1);
-    test_pad_container_frame.pack(side=TOP, fill=BOTH, expand=True, padx=7, pady=7)
+    test_pad_container_frame = ctk.CTkFrame(main_pane, border_width=2, fg_color="white", border_color="black")
+    main_pane.add(test_pad_container_frame, minsize=150)
     populate_test_pad_ui(test_pad_container_frame)
 
-    # Initial log message
+    file_processing_container_frame = ctk.CTkFrame(main_pane, border_width=2, fg_color="white", border_color="black")
+    main_pane.add(file_processing_container_frame, height=140, minsize=140)
+    
+    file_processing_container_frame.grid_columnconfigure(0, weight=1)
+    ctk.CTkLabel(file_processing_container_frame, text="Process Files", font=("", 16, "bold"), text_color="black").pack(anchor=W, padx=10, pady=(5,2))
+    
+    drop_target_frame = ctk.CTkFrame(file_processing_container_frame, fg_color="white", border_color="black", border_width=1, corner_radius=10)
+    drop_target_frame.pack(padx=10, pady=(5,5), fill=X)
+    
+    drop_target_label = ctk.CTkLabel(drop_target_frame, text="Drag & Drop Files Here", 
+                                     fg_color="white", text_color="black", height=46)
+    drop_target_label.pack(padx=2, pady=2, fill=BOTH, expand=True)
+
+    if DND_AVAILABLE:
+        drop_target_label.drop_target_register(DND_FILES)
+        drop_target_label.dnd_bind('<<Drop>>', drop_handler)
+    
+    # Create a frame for the buttons to sit side-by-side
+    button_frame = ctk.CTkFrame(file_processing_container_frame, fg_color="transparent")
+    button_frame.pack(padx=10, pady=(0, 10), fill=X)
+    button_frame.grid_columnconfigure(0, weight=1)
+    button_frame.grid_columnconfigure(1, weight=1)
+
+    process_list_button = ctk.CTkButton(button_frame, text="Process Files from List (.txt)", command=process_file_list,
+                                        fg_color="white", text_color="black", border_color="black", border_width=1, hover_color="white")
+    process_list_button.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+
+    g_stop_button = ctk.CTkButton(button_frame, text="Stop Processing", command=stop_processing,
+                                  fg_color="white", text_color="black", border_color="black", border_width=1, hover_color="white",
+                                  state=DISABLED)
+    g_stop_button.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+
+    log_frame = ctk.CTkFrame(main_pane, border_width=2, fg_color="white", border_color="black")
+    main_pane.add(log_frame, height=150, minsize=100)
+    
+    log_frame.grid_rowconfigure(0, weight=1)
+    log_frame.grid_columnconfigure(0, weight=1)
+    status_log = ctk.CTkTextbox(log_frame, wrap="word", state=DISABLED, fg_color="white", text_color="black", border_width=0)
+    status_log.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+    status_log.tag_config("error", foreground="#FF5555")
+
     initial_status_text = f"Settings loaded. Ready. (v{APP_VERSION})"
     if not DND_AVAILABLE: initial_status_text += " (DND Disabled)"
     log_message(initial_status_text)
